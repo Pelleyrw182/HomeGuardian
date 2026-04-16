@@ -31,10 +31,16 @@ const defaultProfile: HomeProfile = {
   household_size: '',
 }
 
-const randomId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+const randomId = () => {
+  const browserCrypto = globalThis.crypto
+  if (browserCrypto?.randomUUID) {
+    return browserCrypto.randomUUID()
+  }
+  if (browserCrypto?.getRandomValues) {
+    return `${Date.now()}-${browserCrypto.getRandomValues(new Uint32Array(1))[0].toString(16)}`
+  }
+  return `${Date.now()}`
+}
 
 const profileKey = (email: string) => `hg-profile-${email}`
 const taskKey = (email: string) => `hg-tasks-${email}`
