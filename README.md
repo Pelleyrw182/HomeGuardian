@@ -1,13 +1,15 @@
 # HomeGuardian
 
-HomeGuardian helps busy homeowners stay ahead of home maintenance with a single dashboard for account-based access, persistent task tracking, and AI maintenance guidance.
+HomeGuardian helps learners study with less stress and more confidence using one dashboard for account-based access, persistent study tracking, and AI guidance.
+
+> **Value proposition:** Study smarter, not longer. Get clear explanations, quick summaries, and the confidence to walk into any test prepared—without the stress.
 
 ## MVP Features
 
 - **Authentication**: Email/password sign-up and login (Supabase Auth)
-- **Persistence**: Home profile and maintenance tasks are stored per user (Supabase Postgres)
-- **Core business functionality**: AI-powered maintenance guidance based on the user’s home profile + active tasks (OpenRouter)
-- **User dashboard**: Personalized stats, task manager, profile editor, and assistant panel
+- **Persistence**: Study profile and study tasks are stored per user (Supabase Postgres)
+- **Core business functionality**: AI-powered study guidance based on the user’s study profile + active tasks (OpenRouter)
+- **User dashboard**: Personalized stats, study task manager, profile editor, and AI study coach panel
 - **Fallback demo mode**: If Supabase env vars are missing, the app still runs locally with localStorage data so you can view the product immediately
 
 ## Tech Stack

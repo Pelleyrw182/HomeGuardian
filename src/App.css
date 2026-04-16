@@ -4,7 +4,10 @@
 
 body {
   margin: 0;
-  background: #f3f4f6;
+  background:
+    radial-gradient(circle at top left, #dbeafe 0%, transparent 38%),
+    radial-gradient(circle at top right, #ede9fe 0%, transparent 36%),
+    #f3f4f6;
   color: #111827;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
@@ -22,6 +25,11 @@ body {
   gap: 1rem;
   justify-content: space-between;
   align-items: flex-start;
+  background: linear-gradient(120deg, #1d4ed8, #7c3aed);
+  color: #fff;
+  padding: 1.1rem 1.2rem;
+  border-radius: 1rem;
+  box-shadow: 0 16px 36px -24px rgba(30, 64, 175, 0.7);
 }
 
 .app-header h1 {
@@ -32,22 +40,40 @@ body {
 .app-header p {
   margin: 0.5rem 0 0;
   max-width: 65ch;
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .mode-pill {
-  background: #111827;
+  background: rgba(255, 255, 255, 0.2);
   color: #fff;
   padding: 0.4rem 0.75rem;
   border-radius: 999px;
   font-size: 0.85rem;
   white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .card {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe3f2;
+  border-radius: 1rem;
   padding: 1rem;
+  box-shadow: 0 12px 26px -22px rgba(15, 23, 42, 0.65);
+}
+
+.value-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.value-strip span {
+  background: #fff;
+  border: 1px solid #dbe3f2;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-weight: 600;
+  color: #312e81;
 }
 
 .auth-card {
@@ -81,11 +107,17 @@ textarea {
 
 button {
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 0.65rem;
   padding: 0.55rem 0.9rem;
-  background: #2563eb;
+  background: linear-gradient(120deg, #2563eb, #7c3aed);
   color: #fff;
   cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px -14px rgba(37, 99, 235, 0.9);
 }
 
 button:disabled {
@@ -123,6 +155,7 @@ button:disabled {
   margin: 0.5rem 0 0;
   font-size: 1.8rem;
   font-weight: 700;
+  color: #1d4ed8;
 }
 
 .grid-two {
@@ -191,6 +224,10 @@ button:disabled {
 }
 
 @media (max-width: 800px) {
+  .app-header {
+    flex-direction: column;
+  }
+
   .task-form {
     grid-template-columns: 1fr;
   }
