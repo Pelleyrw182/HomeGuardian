@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import smallFixesImage from './assets/value-small-fixes.svg'
+import upkeepImage from './assets/value-routine-upkeep.svg'
+import surpriseIssueImage from './assets/value-surprise-issues.svg'
 import './App.css'
 
 type AppUser = {
@@ -450,6 +453,20 @@ function App() {
         <span>🛠️ Small fixes handled</span>
         <span>📅 Routine upkeep on schedule</span>
         <span>🚨 Fast help for surprise issues</span>
+      </section>
+      <section className="value-gallery" aria-label="Value proposition examples">
+        <figure className="value-image-card">
+          <img src={smallFixesImage} alt="A technician handling a quick home repair." />
+          <figcaption>Small fixes handled</figcaption>
+        </figure>
+        <figure className="value-image-card">
+          <img src={upkeepImage} alt="A homeowner checking routine upkeep tasks on a calendar." />
+          <figcaption>Routine upkeep on schedule</figcaption>
+        </figure>
+        <figure className="value-image-card">
+          <img src={surpriseIssueImage} alt="A burst pipe alert with rapid repair support." />
+          <figcaption>Fast support for surprise issues</figcaption>
+        </figure>
       </section>
 
       {!user ? (

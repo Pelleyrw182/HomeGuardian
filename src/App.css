@@ -76,6 +76,36 @@ body {
   color: #312e81;
 }
 
+.value-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+}
+
+.value-image-card {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbe3f2;
+  border-radius: 0.95rem;
+  overflow: hidden;
+  box-shadow: 0 10px 20px -18px rgba(15, 23, 42, 0.7);
+}
+
+.value-image-card img {
+  display: block;
+  width: 100%;
+  height: 145px;
+  object-fit: cover;
+  background: #e5e7eb;
+}
+
+.value-image-card figcaption {
+  padding: 0.6rem 0.75rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
 .auth-card {
   max-width: 420px;
 }
