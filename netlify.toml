@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/home-assistant"
+  to = "/.netlify/functions/home-assistant"
+  status = 200
