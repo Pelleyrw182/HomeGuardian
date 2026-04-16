@@ -384,15 +384,15 @@ function App() {
 
   const getDemoAssistantReply = () => {
     const focusLine = profile.home_type
-      ? `For ${profile.home_type}, start with active recall and one timed practice set today.`
-      : 'Start with one high-impact topic and one timed practice set today.'
+      ? `For your ${profile.home_type}, focus on the highest-impact preventive checks first.`
+      : 'Start with the top three preventive checks this week.'
 
     const planLine =
       openTaskCount > 0
-        ? `You have ${openTaskCount} open study task(s); finish the hardest one in your first focused session.`
-        : 'Great momentum—add one revision task and one mock-question task for tomorrow.'
+        ? `You currently have ${openTaskCount} open task(s); prioritize safety and water-related items first.`
+        : 'Great job staying current—create one seasonal inspection task to keep momentum.'
 
-    return `${focusLine}\n${planLine}\nSuggested next step: run a 45-minute deep-work block, then spend 10 minutes summarizing what you learned in your own words.`
+    return `${focusLine}\n${planLine}\nSuggested next step: schedule a 30-minute maintenance block in the next 48 hours and complete one task end-to-end.`
   }
 
   const askAssistant = async (event: FormEvent) => {
@@ -439,21 +439,22 @@ function App() {
         <div>
           <h1>HomeGuardian</h1>
           <p>
-            Study smarter, not longer. Get clear explanations, quick summaries, and the
-            confidence to walk into any test prepared—without the stress.
+            Stop worrying about what might break next. We take care of the small fixes, routine
+            upkeep, and surprise issues—so your home stays running smoothly without the stress or
+            last-minute scrambling.
           </p>
         </div>
         <span className="mode-pill">{modeLabel}</span>
       </header>
       <section className="value-strip">
-        <span>⚡ Quick summaries</span>
-        <span>🧠 Clear explanations</span>
-        <span>🎯 Focused exam prep</span>
+        <span>🛠️ Small fixes handled</span>
+        <span>📅 Routine upkeep on schedule</span>
+        <span>🚨 Fast help for surprise issues</span>
       </section>
 
       {!user ? (
         <section className="card auth-card">
-          <h2>{isSignUp ? 'Create your study account' : 'Log in and start studying'}</h2>
+          <h2>{isSignUp ? 'Create account' : 'Log in'}</h2>
           <form onSubmit={handleAuth} className="stack">
             <label>
               Email
@@ -488,81 +489,81 @@ function App() {
           <section className="dashboard-head card">
             <div>
               <h2>Welcome, {user.email}</h2>
-              <p>Your study dashboard is ready.</p>
+              <p>Your maintenance dashboard is ready.</p>
             </div>
             <button onClick={logout}>Log out</button>
           </section>
 
           <section className="stats-grid">
             <article className="card stat">
-              <h3>Study tasks to do</h3>
+              <h3>Open tasks</h3>
               <p>{openTaskCount}</p>
             </article>
             <article className="card stat">
-              <h3>Due this week</h3>
+              <h3>Due in 7 days</h3>
               <p>{dueSoonCount}</p>
             </article>
             <article className="card stat">
-              <h3>Total study tasks</h3>
+              <h3>Total tasks</h3>
               <p>{tasks.length}</p>
             </article>
           </section>
 
           <section className="grid-two">
             <article className="card">
-              <h2>Study profile</h2>
+              <h2>Home profile</h2>
               <form onSubmit={saveProfile} className="stack">
                 <label>
-                  Primary subject
+                  Home type
                   <input
                     value={profile.home_type}
                     onChange={(event) =>
                       setProfile((prev) => ({ ...prev, home_type: event.target.value }))
                     }
-                    placeholder="Biology, Algebra, History..."
+                    placeholder="Single-family, condo, townhouse..."
                   />
                 </label>
                 <label>
-                  Days until exam
+                  Build year
                   <input
                     type="number"
                     value={profile.build_year}
                     onChange={(event) =>
                       setProfile((prev) => ({ ...prev, build_year: event.target.value }))
                     }
-                    placeholder="21"
+                    placeholder="1998"
                   />
                 </label>
                 <label>
-                  Weekly study hours target
+                  Household size
                   <input
                     type="number"
                     value={profile.household_size}
                     onChange={(event) =>
                       setProfile((prev) => ({ ...prev, household_size: event.target.value }))
                     }
-                    placeholder="10"
+                    placeholder="4"
                   />
                 </label>
-                <button type="submit">Save study profile</button>
+                <button type="submit">Save profile</button>
               </form>
             </article>
 
             <article className="card">
-              <h2>AI study coach</h2>
+              <h2>AI maintenance assistant</h2>
               <form className="stack" onSubmit={askAssistant}>
                 <label>
-                  Ask for prep help, summaries, or a study plan
+                  Ask about a concern or upcoming season
                   <textarea
                     required
                     rows={4}
                     value={assistantPrompt}
                     onChange={(event) => setAssistantPrompt(event.target.value)}
-                    placeholder="Example: Explain photosynthesis in simple terms and give me a 30-minute revision plan."
+                    placeholder="Example: What should I check before summer heat starts?"
                   />
                 </label>
                 <button disabled={assistantBusy} type="submit">
-                  {assistantBusy ? 'Generating…' : 'Get study guidance'}
+                  {assistantBusy ? 'Generating…' : 'Get guidance'}
                 </button>
               </form>
               {assistantError && <p className="inline-error">{assistantError}</p>}
@@ -571,18 +572,18 @@ function App() {
           </section>
 
           <section className="card">
-            <h2>Study plan tasks</h2>
+            <h2>Maintenance tasks</h2>
             <form onSubmit={addTask} className="task-form">
               <input
                 required
                 value={taskTitle}
                 onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="Task title (ex: Review Chapter 4)"
+                placeholder="Task title"
               />
               <input
                 value={taskDetails}
                 onChange={(event) => setTaskDetails(event.target.value)}
-                placeholder="Details (ex: summarize key formulas)"
+                placeholder="Details"
               />
               <input
                 type="date"
@@ -593,7 +594,7 @@ function App() {
             </form>
 
             {tasks.length === 0 ? (
-              <p className="empty">No study tasks yet. Add your first focused action.</p>
+              <p className="empty">No tasks yet. Add your first maintenance action.</p>
             ) : (
               <ul className="task-list">
                 {tasks.map((task) => (
