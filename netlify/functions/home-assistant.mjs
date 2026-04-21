@@ -18,17 +18,28 @@ export default async (request) => {
   }
 
   try {
-    const { prompt = '', profile = {}, tasks = [] } = await request.json()
+    const { prompt = '', profile = {}, tasks = [], image = '' } = await request.json()
+
+    const hasImage = typeof image === 'string' && image.startsWith('data:image/')
 
     const systemPrompt =
-      'You are HomeGuardian, a concise home maintenance assistant. Provide practical, safety-first guidance with clear next steps.'
+      'You are HomeGuardian, a concise home maintenance assistant. Provide practical, safety-first guidance with clear next steps. When an image is provided, identify the likely issue visible in the photo and provide a concrete fix plan.'
 
     const userPrompt = [
       `Home profile: ${JSON.stringify(profile)}`,
       `Active tasks: ${JSON.stringify(tasks)}`,
       `Question: ${prompt}`,
-      'Respond in plain text with: (1) priority assessment, (2) next 3 steps, (3) risk if ignored.',
+      hasImage
+        ? 'Respond in plain text with: (1) likely problem, (2) why this is likely, (3) step-by-step fix plan, (4) when to call a professional.'
+        : 'Respond in plain text with: (1) priority assessment, (2) next 3 steps, (3) risk if ignored.',
     ].join('\n')
+
+    const userMessageContent = hasImage
+      ? [
+          { type: 'text', text: userPrompt },
+          { type: 'image_url', image_url: { url: image } },
+        ]
+      : userPrompt
 
     const response = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -40,7 +51,7 @@ export default async (request) => {
         model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
+          { role: 'user', content: userMessageContent },
         ],
         temperature: 0.3,
       }),

@@ -305,6 +305,34 @@ function App() {
 
   const combinedRequestCount = tasks.length + photoAnalyses.length
 
+  const overdueTaskCount = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return tasks.filter((task) => {
+      if (task.status === 'done' || !task.due_date) return false
+      const due = new Date(task.due_date)
+      due.setHours(0, 0, 0, 0)
+      return due < today
+    }).length
+  }, [tasks])
+
+  const completedThisWeekCount = useMemo(() => {
+    const now = Date.now()
+    const weekMs = 7 * 24 * 60 * 60 * 1000
+    return tasks.filter((task) => task.status === 'done' && now - Date.parse(task.created_at) <= weekMs)
+      .length
+  }, [tasks])
+
+  const backlogRate = useMemo(() => {
+    if (tasks.length === 0) return 0
+    return Math.round((openTaskCount / tasks.length) * 100)
+  }, [openTaskCount, tasks.length])
+
+  const urgentIncidentRate = useMemo(() => {
+    if (combinedRequestCount === 0) return 0
+    return Math.round((urgentFindingCount / combinedRequestCount) * 100)
+  }, [combinedRequestCount, urgentFindingCount])
+
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
     if (!user) return
@@ -582,7 +610,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `Analyze this home issue photo for severity and next actions.\nNotes: ${issueNotes || 'N/A'}\nReturn concise findings.`,
+          prompt: `Interpret this photo live and identify what the issue is and how to solve it.\nNotes: ${issueNotes || 'N/A'}\nBe concrete and safety-first.`,
           image: imageData,
           fileName: issuePhoto.name,
           tasks: tasks.slice(0, 10),
@@ -748,12 +776,28 @@ function App() {
                   <p>{combinedRequestCount}</p>
                 </article>
                 <article className="card stat">
+                  <h3>Backlog rate</h3>
+                  <p>{backlogRate}%</p>
+                </article>
+                <article className="card stat">
                   <h3>Completion rate</h3>
                   <p>{completionRate}%</p>
                 </article>
                 <article className="card stat">
                   <h3>Urgent findings</h3>
                   <p>{urgentFindingCount}</p>
+                </article>
+                <article className="card stat">
+                  <h3>SLA risk items</h3>
+                  <p>{overdueTaskCount + dueSoonCount}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Urgent incident rate</h3>
+                  <p>{urgentIncidentRate}%</p>
+                </article>
+                <article className="card stat">
+                  <h3>Completed (7d)</h3>
+                  <p>{completedThisWeekCount}</p>
                 </article>
                 <article className="card stat">
                   <h3>Upcoming workload</h3>
@@ -763,8 +807,8 @@ function App() {
               <section className="card">
                 <h2>Owner operations summary</h2>
                 <p>
-                  Monitor urgent findings and completion rate to keep response times strong and
-                  backlog under control.
+                  Track service health with backlog, SLA risk, urgent rate, and weekly completions
+                  to keep the business running efficiently.
                 </p>
                 <ul className="analysis-list">
                   {photoAnalyses.slice(0, 5).map((analysis) => (
@@ -861,7 +905,7 @@ function App() {
                 </article>
 
                 <article className="card">
-                  <h2>AI photo issue analysis</h2>
+                  <h2>AI live photo diagnosis</h2>
                   <form className="stack" onSubmit={analyzeIssuePhoto}>
                     <label>
                       Upload issue photo
