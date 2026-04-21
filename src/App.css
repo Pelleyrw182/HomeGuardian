@@ -203,6 +203,48 @@ button:disabled {
   border-radius: 0.5rem;
 }
 
+.analysis-list {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.analysis-list li {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+}
+
+.analysis-list p {
+  margin: 0.35rem 0;
+}
+
+.severity-pill {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-weight: 700;
+}
+
+.severity-pill.low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.severity-pill.medium {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.severity-pill.high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .task-form {
   display: grid;
   grid-template-columns: 1.1fr 1.6fr 0.8fr auto;

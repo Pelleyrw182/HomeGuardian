@@ -26,6 +26,15 @@ type HomeProfile = {
   household_size: string
 }
 
+type IssuePhotoAnalysis = {
+  id: string
+  created_at: string
+  photo_name: string
+  summary: string
+  severity: 'low' | 'medium' | 'high'
+  recommended_action: string
+}
+
 const demoUserStorageKey = 'hg-demo-user'
 
 const defaultProfile: HomeProfile = {
@@ -47,6 +56,62 @@ const randomId = () => {
 
 const profileKey = (email: string) => `hg-profile-${email}`
 const taskKey = (email: string) => `hg-tasks-${email}`
+const photoAnalysisKey = (email: string) => `hg-photo-analyses-${email}`
+
+const inferSeverityFromText = (text: string): IssuePhotoAnalysis['severity'] => {
+  const normalized = text.toLowerCase()
+  if (
+    normalized.includes('smoke') ||
+    normalized.includes('fire') ||
+    normalized.includes('electrical') ||
+    normalized.includes('flood') ||
+    normalized.includes('burst')
+  ) {
+    return 'high'
+  }
+  if (
+    normalized.includes('leak') ||
+    normalized.includes('crack') ||
+    normalized.includes('mold') ||
+    normalized.includes('rust')
+  ) {
+    return 'medium'
+  }
+  return 'low'
+}
+
+const buildDemoPhotoAnalysis = (
+  fileName: string,
+  notes: string,
+): Omit<IssuePhotoAnalysis, 'id' | 'created_at'> => {
+  const severity = inferSeverityFromText(`${fileName} ${notes}`)
+  const recommendedAction =
+    severity === 'high'
+      ? 'Dispatch a technician within 24 hours and document immediate safety controls.'
+      : severity === 'medium'
+        ? 'Schedule service this week and monitor the area daily for changes.'
+        : 'Add to routine maintenance and re-check during the next scheduled visit.'
+
+  return {
+    photo_name: fileName,
+    summary:
+      severity === 'high'
+        ? 'Potential high-risk issue detected from visual context and notes.'
+        : severity === 'medium'
+          ? 'Issue appears moderate and should be addressed before escalation.'
+          : 'Issue appears minor based on the submitted photo and notes.',
+    severity,
+    recommended_action: recommendedAction,
+  }
+}
+
+const fileToDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('Could not read uploaded image.'))
+    reader.readAsDataURL(file)
+  })
 
 function App() {
   const [user, setUser] = useState<AppUser | null>(null)
@@ -66,6 +131,13 @@ function App() {
   const [assistantReply, setAssistantReply] = useState('')
   const [assistantBusy, setAssistantBusy] = useState(false)
   const [assistantError, setAssistantError] = useState('')
+
+  const [issuePhoto, setIssuePhoto] = useState<File | null>(null)
+  const [issueNotes, setIssueNotes] = useState('')
+  const [photoAnalysisReply, setPhotoAnalysisReply] = useState('')
+  const [photoAnalysisBusy, setPhotoAnalysisBusy] = useState(false)
+  const [photoAnalysisError, setPhotoAnalysisError] = useState('')
+  const [photoAnalyses, setPhotoAnalyses] = useState<IssuePhotoAnalysis[]>([])
 
   const [dataError, setDataError] = useState('')
 
@@ -116,8 +188,14 @@ function App() {
       if (!user) {
         setTasks([])
         setProfile(defaultProfile)
+        setPhotoAnalyses([])
         return
       }
+
+      const savedPhotoAnalyses = localStorage.getItem(photoAnalysisKey(user.email))
+      setPhotoAnalyses(
+        savedPhotoAnalyses ? (JSON.parse(savedPhotoAnalyses) as IssuePhotoAnalysis[]) : [],
+      )
 
       if (!isSupabaseConfigured) {
         const savedProfile = localStorage.getItem(profileKey(user.email))
@@ -192,6 +270,23 @@ function App() {
       return dueDate >= now && dueDate <= in7Days
     }).length
   }, [tasks])
+
+  const completedTaskCount = useMemo(
+    () => tasks.filter((task) => task.status === 'done').length,
+    [tasks],
+  )
+
+  const completionRate = useMemo(() => {
+    if (tasks.length === 0) return 0
+    return Math.round((completedTaskCount / tasks.length) * 100)
+  }, [completedTaskCount, tasks.length])
+
+  const urgentFindingCount = useMemo(
+    () => photoAnalyses.filter((analysis) => analysis.severity === 'high').length,
+    [photoAnalyses],
+  )
+
+  const serviceRequestCount = tasks.length + photoAnalyses.length
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
@@ -436,6 +531,86 @@ function App() {
     }
   }
 
+  const analyzeIssuePhoto = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!user || !issuePhoto) return
+
+    if (issuePhoto.size > 5 * 1024 * 1024) {
+      setPhotoAnalysisError('Please upload an image under 5MB.')
+      return
+    }
+
+    setPhotoAnalysisError('')
+    setPhotoAnalysisReply('')
+    setPhotoAnalysisBusy(true)
+
+    try {
+      const imageData = await fileToDataUrl(issuePhoto)
+      const response = await fetch('/api/home-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Analyze this home issue photo for severity and next actions.\nNotes: ${issueNotes || 'N/A'}\nReturn concise findings.`,
+          image: imageData,
+          fileName: issuePhoto.name,
+          tasks: tasks.slice(0, 10),
+          profile,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Photo analysis endpoint unavailable.')
+      }
+
+      const result = (await response.json()) as { response?: string }
+      if (!result.response) {
+        throw new Error('Photo analysis returned empty response.')
+      }
+
+      const severity = inferSeverityFromText(result.response)
+      const analysis: IssuePhotoAnalysis = {
+        id: randomId(),
+        created_at: new Date().toISOString(),
+        photo_name: issuePhoto.name,
+        summary: result.response,
+        severity,
+        recommended_action:
+          severity === 'high'
+            ? 'Escalate to an urgent dispatch workflow.'
+            : severity === 'medium'
+              ? 'Create a near-term service appointment and monitor.'
+              : 'Track in routine maintenance cadence.',
+      }
+
+      setPhotoAnalysisReply(result.response)
+      setPhotoAnalyses((prev) => {
+        const next = [analysis, ...prev]
+        localStorage.setItem(photoAnalysisKey(user.email), JSON.stringify(next))
+        return next
+      })
+    } catch {
+      const fallback = buildDemoPhotoAnalysis(issuePhoto.name, issueNotes)
+      const fallbackReply = `${fallback.summary}\nRecommended action: ${fallback.recommended_action}`
+      const analysis: IssuePhotoAnalysis = {
+        id: randomId(),
+        created_at: new Date().toISOString(),
+        ...fallback,
+      }
+
+      setPhotoAnalysisReply(fallbackReply)
+      setPhotoAnalysisError(
+        'Using local fallback analysis. Configure the AI function for live image interpretation.',
+      )
+      setPhotoAnalyses((prev) => {
+        const next = [analysis, ...prev]
+        localStorage.setItem(photoAnalysisKey(user.email), JSON.stringify(next))
+        return next
+      })
+    } finally {
+      setPhotoAnalysisBusy(false)
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -526,6 +701,25 @@ function App() {
             </article>
           </section>
 
+          <section className="stats-grid">
+            <article className="card stat">
+              <h3>Service requests</h3>
+              <p>{serviceRequestCount}</p>
+            </article>
+            <article className="card stat">
+              <h3>Completion rate</h3>
+              <p>{completionRate}%</p>
+            </article>
+            <article className="card stat">
+              <h3>Urgent findings</h3>
+              <p>{urgentFindingCount}</p>
+            </article>
+            <article className="card stat">
+              <h3>Upcoming workload</h3>
+              <p>{dueSoonCount}</p>
+            </article>
+          </section>
+
           <section className="grid-two">
             <article className="card">
               <h2>Home profile</h2>
@@ -585,6 +779,46 @@ function App() {
               </form>
               {assistantError && <p className="inline-error">{assistantError}</p>}
               {assistantReply && <pre className="assistant-reply">{assistantReply}</pre>}
+            </article>
+
+            <article className="card">
+              <h2>AI photo issue analysis</h2>
+              <form className="stack" onSubmit={analyzeIssuePhoto}>
+                <label>
+                  Upload issue photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    required
+                    onChange={(event) => setIssuePhoto(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <label>
+                  Optional notes
+                  <textarea
+                    rows={3}
+                    value={issueNotes}
+                    onChange={(event) => setIssueNotes(event.target.value)}
+                    placeholder="Example: Leak near upstairs bathroom after heavy rain."
+                  />
+                </label>
+                <button disabled={photoAnalysisBusy} type="submit">
+                  {photoAnalysisBusy ? 'Analyzing…' : 'Analyze photo'}
+                </button>
+              </form>
+              {photoAnalysisError && <p className="inline-error">{photoAnalysisError}</p>}
+              {photoAnalysisReply && <pre className="assistant-reply">{photoAnalysisReply}</pre>}
+              <ul className="analysis-list">
+                {photoAnalyses.slice(0, 5).map((analysis) => (
+                  <li key={analysis.id}>
+                    <strong>{analysis.photo_name}</strong>
+                    <p>
+                      Severity: <span className={`severity-pill ${analysis.severity}`}>{analysis.severity}</span>
+                    </p>
+                    <small>{new Date(analysis.created_at).toLocaleString()}</small>
+                  </li>
+                ))}
+              </ul>
             </article>
           </section>
 
