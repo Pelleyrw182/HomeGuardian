@@ -316,7 +316,7 @@ function App() {
     }).length
   }, [tasks])
 
-  const completedThisWeekCount = useMemo(() => {
+  const recentlyCreatedDoneCount = useMemo(() => {
     const now = Date.now()
     const weekMs = 7 * 24 * 60 * 60 * 1000
     return tasks.filter((task) => task.status === 'done' && now - Date.parse(task.created_at) <= weekMs)
@@ -796,8 +796,8 @@ function App() {
                   <p>{urgentIncidentRate}%</p>
                 </article>
                 <article className="card stat">
-                  <h3>Completed (7d)</h3>
-                  <p>{completedThisWeekCount}</p>
+                  <h3>Done jobs created (7d)</h3>
+                  <p>{recentlyCreatedDoneCount}</p>
                 </article>
                 <article className="card stat">
                   <h3>Upcoming workload</h3>
