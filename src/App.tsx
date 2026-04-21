@@ -43,11 +43,23 @@ type ServiceRequest = {
   created_at: string
   homeowner_email: string
   provider_email: string | null
+  contractor_id?: string
+  contractor_name?: string
   service_type: string
   notes: string
   status: 'requested' | 'accepted'
   estimated_revenue: number
   accepted_at: string | null
+}
+
+type PrivateContractor = {
+  id: string
+  name: string
+  specialty: string
+  rating: number
+  response_time: string
+  service_area: string
+  starting_price: number
 }
 
 const demoUserStorageKey = 'hg-demo-user'
@@ -73,6 +85,36 @@ const profileKey = (email: string) => `hg-profile-${email}`
 const taskKey = (email: string) => `hg-tasks-${email}`
 const photoAnalysisKey = (email: string) => `hg-photo-analyses-${email}`
 const serviceRequestStorageKey = 'hg-service-requests'
+
+const privateContractors: PrivateContractor[] = [
+  {
+    id: 'blue-pipe-pros',
+    name: 'Blue Pipe Pros',
+    specialty: 'Plumbing repairs',
+    rating: 4.8,
+    response_time: 'Same day',
+    service_area: 'City core + inner suburbs',
+    starting_price: 165,
+  },
+  {
+    id: 'prime-electric',
+    name: 'Prime Electric Co.',
+    specialty: 'Electrical troubleshooting',
+    rating: 4.7,
+    response_time: 'Within 24 hours',
+    service_area: 'Metro-wide',
+    starting_price: 185,
+  },
+  {
+    id: 'total-comfort-hvac',
+    name: 'Total Comfort HVAC',
+    specialty: 'Heating & cooling',
+    rating: 4.9,
+    response_time: 'Priority next-day',
+    service_area: 'North + west districts',
+    starting_price: 210,
+  },
+]
 
 const estimateServiceRevenue = (serviceType: string) => {
   const normalized = serviceType.toLowerCase()
@@ -166,6 +208,7 @@ function App() {
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([])
   const [serviceType, setServiceType] = useState('Plumber')
   const [serviceRequestNotes, setServiceRequestNotes] = useState('')
+  const [selectedContractorId, setSelectedContractorId] = useState(privateContractors[0].id)
 
   const [dataError, setDataError] = useState('')
 
@@ -404,6 +447,11 @@ function App() {
   const homeownerRequests = useMemo(
     () => serviceRequests.filter((request) => request.homeowner_email === user?.email),
     [serviceRequests, user?.email],
+  )
+
+  const selectedContractor = useMemo(
+    () => privateContractors.find((contractor) => contractor.id === selectedContractorId) ?? null,
+    [selectedContractorId],
   )
 
   const providerInboxRequests = useMemo(
@@ -761,17 +809,22 @@ function App() {
 
   const submitServiceRequest = (event: FormEvent) => {
     event.preventDefault()
-    if (!user || !serviceType.trim()) return
+    if (!user || !serviceType.trim() || !selectedContractor) return
 
     const nextRequest: ServiceRequest = {
       id: randomId(),
       created_at: new Date().toISOString(),
       homeowner_email: user.email,
       provider_email: null,
+      contractor_id: selectedContractor.id,
+      contractor_name: selectedContractor.name,
       service_type: serviceType.trim(),
       notes: serviceRequestNotes.trim(),
       status: 'requested',
-      estimated_revenue: estimateServiceRevenue(serviceType),
+      estimated_revenue: Math.max(
+        estimateServiceRevenue(serviceType),
+        selectedContractor.starting_price,
+      ),
       accepted_at: null,
     }
 
@@ -1015,6 +1068,7 @@ function App() {
                     {providerInboxRequests.map((request) => (
                       <li key={request.id}>
                         <strong>{request.service_type}</strong>
+                        <p>Preferred contractor: {request.contractor_name ?? 'Not specified'}</p>
                         <p>Homeowner: {request.homeowner_email}</p>
                         {request.notes && <p>Notes: {request.notes}</p>}
                         <p>Status: {request.status}</p>
@@ -1153,8 +1207,38 @@ function App() {
                 </article>
 
                 <article className="card">
-                  <h2>Request a provider</h2>
+                  <h2>Request a private contractor</h2>
                   <form className="stack" onSubmit={submitServiceRequest}>
+                    <label>
+                      Choose contractor
+                      <select
+                        value={selectedContractorId}
+                        onChange={(event) => setSelectedContractorId(event.target.value)}
+                      >
+                        {privateContractors.map((contractor) => (
+                          <option key={contractor.id} value={contractor.id}>
+                            {contractor.name} · {contractor.specialty}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="contractor-options" aria-label="Private contractor options">
+                      {privateContractors.map((contractor) => (
+                        <article
+                          className={`contractor-card ${
+                            contractor.id === selectedContractorId ? 'selected' : ''
+                          }`}
+                          key={contractor.id}
+                        >
+                          <h3>{contractor.name}</h3>
+                          <p>{contractor.specialty}</p>
+                          <p>Rating: {contractor.rating}/5</p>
+                          <p>Response: {contractor.response_time}</p>
+                          <p>Area: {contractor.service_area}</p>
+                          <p>Starts at: ${contractor.starting_price}</p>
+                        </article>
+                      ))}
+                    </div>
                     <label>
                       Service type
                       <input
@@ -1179,6 +1263,7 @@ function App() {
                     {homeownerRequests.slice(0, 8).map((request) => (
                       <li key={request.id}>
                         <strong>{request.service_type}</strong>
+                        <p>Contractor: {request.contractor_name ?? 'Not specified'}</p>
                         <p>Status: {request.status}</p>
                         <p>Estimated cost: ${request.estimated_revenue}</p>
                         {request.provider_email && <p>Provider: {request.provider_email}</p>}

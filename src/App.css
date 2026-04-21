@@ -140,12 +140,14 @@ label {
 
 input,
 textarea,
+select,
 button {
   font: inherit;
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 0.55rem 0.65rem;
   border-radius: 0.5rem;
@@ -236,6 +238,34 @@ button:disabled {
 
 .analysis-list p {
   margin: 0.35rem 0;
+}
+
+.contractor-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.55rem;
+}
+
+.contractor-card {
+  border: 1px solid #d1d5db;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+  background: #f9fafb;
+}
+
+.contractor-card.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.contractor-card h3 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.contractor-card p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
 }
 
 .severity-pill {
