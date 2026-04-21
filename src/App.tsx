@@ -286,7 +286,7 @@ function App() {
     [photoAnalyses],
   )
 
-  const totalRequestCount = tasks.length + photoAnalyses.length
+  const combinedRequestCount = tasks.length + photoAnalyses.length
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
@@ -704,7 +704,7 @@ function App() {
           <section className="stats-grid">
             <article className="card stat">
               <h3>Service requests</h3>
-              <p>{totalRequestCount}</p>
+              <p>{combinedRequestCount}</p>
             </article>
             <article className="card stat">
               <h3>Completion rate</h3>
