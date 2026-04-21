@@ -12,7 +12,7 @@ type AppUser = {
   role: UserRole
 }
 
-type UserRole = 'customer' | 'owner'
+type UserRole = 'customer' | 'provider' | 'owner'
 
 type MaintenanceTask = {
   id: string
@@ -38,6 +38,18 @@ type IssuePhotoAnalysis = {
   recommended_action: string
 }
 
+type ServiceRequest = {
+  id: string
+  created_at: string
+  homeowner_email: string
+  provider_email: string | null
+  service_type: string
+  notes: string
+  status: 'requested' | 'accepted'
+  estimated_revenue: number
+  accepted_at: string | null
+}
+
 const demoUserStorageKey = 'hg-demo-user'
 
 const defaultProfile: HomeProfile = {
@@ -60,6 +72,15 @@ const randomId = () => {
 const profileKey = (email: string) => `hg-profile-${email}`
 const taskKey = (email: string) => `hg-tasks-${email}`
 const photoAnalysisKey = (email: string) => `hg-photo-analyses-${email}`
+const serviceRequestStorageKey = 'hg-service-requests'
+
+const estimateServiceRevenue = (serviceType: string) => {
+  const normalized = serviceType.toLowerCase()
+  if (normalized.includes('plumb')) return 240
+  if (normalized.includes('electr')) return 260
+  if (normalized.includes('hvac')) return 300
+  return 180
+}
 
 const inferSeverityFromText = (text: string): IssuePhotoAnalysis['severity'] => {
   const normalized = text.toLowerCase()
@@ -142,11 +163,15 @@ function App() {
   const [photoAnalysisBusy, setPhotoAnalysisBusy] = useState(false)
   const [photoAnalysisError, setPhotoAnalysisError] = useState('')
   const [photoAnalyses, setPhotoAnalyses] = useState<IssuePhotoAnalysis[]>([])
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([])
+  const [serviceType, setServiceType] = useState('Plumber')
+  const [serviceRequestNotes, setServiceRequestNotes] = useState('')
 
   const [dataError, setDataError] = useState('')
 
   const modeLabel = isSupabaseConfigured ? 'Supabase mode' : 'Demo mode'
   const isOwner = user?.role === 'owner'
+  const isProvider = user?.role === 'provider'
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -158,7 +183,12 @@ function App() {
             setUser({
               id: parsed.id,
               email: parsed.email,
-              role: parsed.role === 'owner' ? 'owner' : 'customer',
+              role:
+                parsed.role === 'owner'
+                  ? 'owner'
+                  : parsed.role === 'provider'
+                    ? 'provider'
+                    : 'customer',
             })
           }
         } catch {
@@ -178,7 +208,12 @@ function App() {
       setUser({
         id: sessionUser.id,
         email: sessionUser.email,
-        role: sessionUser.user_metadata?.role === 'owner' ? 'owner' : 'customer',
+        role:
+          sessionUser.user_metadata?.role === 'owner'
+            ? 'owner'
+            : sessionUser.user_metadata?.role === 'provider'
+              ? 'provider'
+              : 'customer',
       })
     })
 
@@ -193,7 +228,12 @@ function App() {
       setUser({
         id: sessionUser.id,
         email: sessionUser.email,
-        role: sessionUser.user_metadata?.role === 'owner' ? 'owner' : 'customer',
+        role:
+          sessionUser.user_metadata?.role === 'owner'
+            ? 'owner'
+            : sessionUser.user_metadata?.role === 'provider'
+              ? 'provider'
+              : 'customer',
       })
     })
 
@@ -206,8 +246,12 @@ function App() {
         setTasks([])
         setProfile(defaultProfile)
         setPhotoAnalyses([])
+        setServiceRequests([])
         return
       }
+
+      const savedRequests = localStorage.getItem(serviceRequestStorageKey)
+      setServiceRequests(savedRequests ? (JSON.parse(savedRequests) as ServiceRequest[]) : [])
 
       const savedPhotoAnalyses = localStorage.getItem(photoAnalysisKey(user.email))
       setPhotoAnalyses(
@@ -333,6 +377,45 @@ function App() {
     return Math.round((urgentFindingCount / combinedRequestCount) * 100)
   }, [combinedRequestCount, urgentFindingCount])
 
+  const acceptedServiceCount = useMemo(
+    () => serviceRequests.filter((request) => request.status === 'accepted').length,
+    [serviceRequests],
+  )
+
+  const pendingServiceCount = useMemo(
+    () => serviceRequests.filter((request) => request.status === 'requested').length,
+    [serviceRequests],
+  )
+
+  const totalServiceRevenue = useMemo(
+    () =>
+      serviceRequests.reduce(
+        (sum, request) => (request.status === 'accepted' ? sum + request.estimated_revenue : sum),
+        0,
+      ),
+    [serviceRequests],
+  )
+
+  const averageTicketValue = useMemo(() => {
+    if (acceptedServiceCount === 0) return 0
+    return Math.round(totalServiceRevenue / acceptedServiceCount)
+  }, [acceptedServiceCount, totalServiceRevenue])
+
+  const homeownerRequests = useMemo(
+    () => serviceRequests.filter((request) => request.homeowner_email === user?.email),
+    [serviceRequests, user?.email],
+  )
+
+  const providerInboxRequests = useMemo(
+    () =>
+      serviceRequests.filter(
+        (request) =>
+          request.status === 'requested' ||
+          (request.provider_email !== null && request.provider_email === user?.email),
+      ),
+    [serviceRequests, user?.email],
+  )
+
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
     if (!user) return
@@ -391,7 +474,12 @@ function App() {
     if (error) {
       setAuthError(error.message)
     } else {
-      const signedInRole = data.user?.user_metadata?.role === 'owner' ? 'owner' : 'customer'
+      const signedInRole =
+        data.user?.user_metadata?.role === 'owner'
+          ? 'owner'
+          : data.user?.user_metadata?.role === 'provider'
+            ? 'provider'
+            : 'customer'
       if (!isSignUp && signedInRole !== authRole) {
         await supabase.auth.signOut()
         setAuthError(
@@ -671,6 +759,49 @@ function App() {
     }
   }
 
+  const submitServiceRequest = (event: FormEvent) => {
+    event.preventDefault()
+    if (!user || !serviceType.trim()) return
+
+    const nextRequest: ServiceRequest = {
+      id: randomId(),
+      created_at: new Date().toISOString(),
+      homeowner_email: user.email,
+      provider_email: null,
+      service_type: serviceType.trim(),
+      notes: serviceRequestNotes.trim(),
+      status: 'requested',
+      estimated_revenue: estimateServiceRevenue(serviceType),
+      accepted_at: null,
+    }
+
+    setServiceRequests((prev) => {
+      const next = [nextRequest, ...prev]
+      localStorage.setItem(serviceRequestStorageKey, JSON.stringify(next))
+      return next
+    })
+    setServiceType('Plumber')
+    setServiceRequestNotes('')
+  }
+
+  const acceptServiceRequest = (requestId: string) => {
+    if (!user) return
+    setServiceRequests((prev) => {
+      const next: ServiceRequest[] = prev.map((request) =>
+        request.id === requestId
+          ? {
+              ...request,
+              status: 'accepted' as const,
+              provider_email: user.email,
+              accepted_at: new Date().toISOString(),
+            }
+          : request,
+      )
+      localStorage.setItem(serviceRequestStorageKey, JSON.stringify(next))
+      return next
+    })
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -707,7 +838,13 @@ function App() {
       {!user ? (
         <section className="card auth-card">
           <h2>
-            {isSignUp ? 'Create account' : 'Log in'} ({authRole === 'owner' ? 'Owner' : 'Customer'})
+            {isSignUp ? 'Create account' : 'Log in'} (
+            {authRole === 'owner'
+              ? 'Owner'
+              : authRole === 'provider'
+                ? 'Provider'
+                : 'Homeowner'}
+            )
           </h2>
           <div className="role-toggle" role="group" aria-label="Choose login type">
             <button
@@ -715,7 +852,14 @@ function App() {
               className={authRole === 'customer' ? 'active' : ''}
               onClick={() => setAuthRole('customer')}
             >
-              Customer login
+              Homeowner login
+            </button>
+            <button
+              type="button"
+              className={authRole === 'provider' ? 'active' : ''}
+              onClick={() => setAuthRole('provider')}
+            >
+              Provider login
             </button>
             <button
               type="button"
@@ -762,7 +906,9 @@ function App() {
               <p>
                 {isOwner
                   ? 'Your owner dashboard is ready with firm-level operational insight.'
-                  : 'Your customer dashboard is ready for home maintenance tracking.'}
+                  : isProvider
+                    ? 'Your provider dashboard is ready with incoming service requests.'
+                    : 'Your homeowner dashboard is ready for maintenance tracking.'}
               </p>
             </div>
             <button onClick={logout}>Log out</button>
@@ -772,8 +918,8 @@ function App() {
             <>
               <section className="stats-grid">
                 <article className="card stat">
-                  <h3>Service requests</h3>
-                  <p>{combinedRequestCount}</p>
+                  <h3>Total request volume</h3>
+                  <p>{combinedRequestCount + serviceRequests.length}</p>
                 </article>
                 <article className="card stat">
                   <h3>Backlog rate</h3>
@@ -792,6 +938,22 @@ function App() {
                   <p>{overdueTaskCount + dueSoonCount}</p>
                 </article>
                 <article className="card stat">
+                  <h3>Accepted jobs</h3>
+                  <p>{acceptedServiceCount}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Pending dispatch</h3>
+                  <p>{pendingServiceCount}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Revenue</h3>
+                  <p>${totalServiceRevenue}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Avg ticket</h3>
+                  <p>${averageTicketValue}</p>
+                </article>
+                <article className="card stat">
                   <h3>Urgent incident rate</h3>
                   <p>{urgentIncidentRate}%</p>
                 </article>
@@ -807,8 +969,8 @@ function App() {
               <section className="card">
                 <h2>Owner operations summary</h2>
                 <p>
-                  Track service health with backlog, SLA risk, urgent rate, and weekly completions
-                  to keep the business running efficiently.
+                  Track revenue, accepted jobs, dispatch pressure, and fulfillment health to run the
+                  business with clear operational visibility.
                 </p>
                 <ul className="analysis-list">
                   {photoAnalyses.slice(0, 5).map((analysis) => (
@@ -824,6 +986,49 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              </section>
+            </>
+          ) : isProvider ? (
+            <>
+              <section className="stats-grid">
+                <article className="card stat">
+                  <h3>Inbox requests</h3>
+                  <p>{providerInboxRequests.length}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Awaiting acceptance</h3>
+                  <p>{pendingServiceCount}</p>
+                </article>
+                <article className="card stat">
+                  <h3>Accepted jobs</h3>
+                  <p>
+                    {providerInboxRequests.filter((request) => request.status === 'accepted').length}
+                  </p>
+                </article>
+              </section>
+              <section className="card">
+                <h2>Provider request inbox</h2>
+                {providerInboxRequests.length === 0 ? (
+                  <p className="empty">No service requests yet.</p>
+                ) : (
+                  <ul className="analysis-list">
+                    {providerInboxRequests.map((request) => (
+                      <li key={request.id}>
+                        <strong>{request.service_type}</strong>
+                        <p>Homeowner: {request.homeowner_email}</p>
+                        {request.notes && <p>Notes: {request.notes}</p>}
+                        <p>Status: {request.status}</p>
+                        <p>Estimated ticket: ${request.estimated_revenue}</p>
+                        {request.status === 'requested' && (
+                          <button type="button" onClick={() => acceptServiceRequest(request.id)}>
+                            Accept request
+                          </button>
+                        )}
+                        <small>{new Date(request.created_at).toLocaleString()}</small>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
             </>
           ) : (
@@ -942,6 +1147,42 @@ function App() {
                           </span>
                         </p>
                         <small>{new Date(analysis.created_at).toLocaleString()}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+
+                <article className="card">
+                  <h2>Request a provider</h2>
+                  <form className="stack" onSubmit={submitServiceRequest}>
+                    <label>
+                      Service type
+                      <input
+                        required
+                        value={serviceType}
+                        onChange={(event) => setServiceType(event.target.value)}
+                        placeholder="Plumber"
+                      />
+                    </label>
+                    <label>
+                      Issue details
+                      <textarea
+                        rows={3}
+                        value={serviceRequestNotes}
+                        onChange={(event) => setServiceRequestNotes(event.target.value)}
+                        placeholder="Example: kitchen sink leaking under cabinet."
+                      />
+                    </label>
+                    <button type="submit">Send request</button>
+                  </form>
+                  <ul className="analysis-list">
+                    {homeownerRequests.slice(0, 8).map((request) => (
+                      <li key={request.id}>
+                        <strong>{request.service_type}</strong>
+                        <p>Status: {request.status}</p>
+                        <p>Estimated cost: ${request.estimated_revenue}</p>
+                        {request.provider_email && <p>Provider: {request.provider_email}</p>}
+                        <small>{new Date(request.created_at).toLocaleString()}</small>
                       </li>
                     ))}
                   </ul>
