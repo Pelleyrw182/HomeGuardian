@@ -194,11 +194,6 @@ function App() {
   const [taskDetails, setTaskDetails] = useState('')
   const [taskDueDate, setTaskDueDate] = useState('')
 
-  const [assistantPrompt, setAssistantPrompt] = useState('')
-  const [assistantReply, setAssistantReply] = useState('')
-  const [assistantBusy, setAssistantBusy] = useState(false)
-  const [assistantError, setAssistantError] = useState('')
-
   const [issuePhoto, setIssuePhoto] = useState<File | null>(null)
   const [issueNotes, setIssueNotes] = useState('')
   const [photoAnalysisReply, setPhotoAnalysisReply] = useState('')
@@ -549,8 +544,6 @@ function App() {
   }
 
   const logout = async () => {
-    setAssistantReply('')
-
     if (!isSupabaseConfigured) {
       localStorage.removeItem(demoUserStorageKey)
       setUser(null)
@@ -674,57 +667,6 @@ function App() {
     }
 
     setTasks((prev) => prev.filter((item) => item.id !== task.id))
-  }
-
-  const getDemoAssistantReply = () => {
-    const focusLine = profile.home_type
-      ? `For your ${profile.home_type}, focus on the highest-impact preventive checks first.`
-      : 'Start with the top three preventive checks this week.'
-
-    const planLine =
-      openTaskCount > 0
-        ? `You currently have ${openTaskCount} open task(s); prioritize safety and water-related items first.`
-        : 'Great job staying current—create one seasonal inspection task to keep momentum.'
-
-    return `${focusLine}\n${planLine}\nSuggested next step: schedule a 30-minute maintenance block in the next 48 hours and complete one task end-to-end.`
-  }
-
-  const askAssistant = async (event: FormEvent) => {
-    event.preventDefault()
-    setAssistantError('')
-    setAssistantReply('')
-    setAssistantBusy(true)
-
-    try {
-      const response = await fetch('/api/home-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: assistantPrompt,
-          profile,
-          tasks: tasks.slice(0, 10),
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Assistant endpoint not available.')
-      }
-
-      const result = (await response.json()) as { response?: string }
-
-      if (!result.response) {
-        throw new Error('Assistant returned an empty response.')
-      }
-
-      setAssistantReply(result.response)
-    } catch {
-      setAssistantReply(getDemoAssistantReply())
-      setAssistantError(
-        'Using local fallback advice. Configure OpenRouter + Netlify function for live AI guidance.',
-      )
-    } finally {
-      setAssistantBusy(false)
-    }
   }
 
   const analyzeIssuePhoto = async (event: FormEvent) => {
@@ -1143,28 +1085,7 @@ function App() {
                 </article>
 
                 <article className="card">
-                  <h2>AI maintenance assistant</h2>
-                  <form className="stack" onSubmit={askAssistant}>
-                    <label>
-                      Ask about a concern or upcoming season
-                      <textarea
-                        required
-                        rows={4}
-                        value={assistantPrompt}
-                        onChange={(event) => setAssistantPrompt(event.target.value)}
-                        placeholder="Example: What should I check before summer heat starts?"
-                      />
-                    </label>
-                    <button disabled={assistantBusy} type="submit">
-                      {assistantBusy ? 'Generating…' : 'Get guidance'}
-                    </button>
-                  </form>
-                  {assistantError && <p className="inline-error">{assistantError}</p>}
-                  {assistantReply && <pre className="assistant-reply">{assistantReply}</pre>}
-                </article>
-
-                <article className="card">
-                  <h2>AI live photo diagnosis</h2>
+                  <h2>AI live image interpretation</h2>
                   <form className="stack" onSubmit={analyzeIssuePhoto}>
                     <label>
                       Upload issue photo
