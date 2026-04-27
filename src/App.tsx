@@ -206,10 +206,19 @@ function App() {
   const [selectedContractorId, setSelectedContractorId] = useState(privateContractors[0].id)
 
   const [dataError, setDataError] = useState('')
+  const [activeSection, setActiveSection] = useState('overview')
 
   const modeLabel = isSupabaseConfigured ? 'Supabase mode' : 'Demo mode'
   const isOwner = user?.role === 'owner'
   const isProvider = user?.role === 'provider'
+
+  const pageTitles: Record<string, string> = {
+    overview: 'Overview',
+    tasks: 'Maintenance Tasks',
+    'ai-diagnosis': 'AI Image Interpretation',
+    contractors: 'Request a Contractor',
+    profile: 'Home Profile',
+  }
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -544,6 +553,7 @@ function App() {
   }
 
   const logout = async () => {
+    setActiveSection('overview')
     if (!isSupabaseConfigured) {
       localStorage.removeItem(demoUserStorageKey)
       setUser(null)
@@ -797,454 +807,564 @@ function App() {
     })
   }
 
-  return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <h1>HomeGuardian</h1>
-          <p>
-            Stop worrying about what might break next. We take care of the small fixes, routine
-            upkeep, and surprise issues—so your home stays running smoothly without the stress or
-            last-minute scrambling.
-          </p>
-        </div>
-        <span className="mode-pill">{modeLabel}</span>
-      </header>
-      <section className="value-strip">
-        <span>🛠️ Small fixes handled</span>
-        <span>📅 Routine upkeep on schedule</span>
-        <span>🚨 Fast help for surprise issues</span>
-      </section>
-      <section className="value-gallery" aria-label="Value proposition examples">
-        <figure className="value-image-card">
-          <img src={smallFixesImage} alt="A technician handling a quick home repair." />
-          <figcaption>Small fixes handled</figcaption>
-        </figure>
-        <figure className="value-image-card">
-          <img src={upkeepImage} alt="A homeowner checking routine upkeep tasks on a calendar." />
-          <figcaption>Routine upkeep on schedule</figcaption>
-        </figure>
-        <figure className="value-image-card">
-          <img src={surpriseIssueImage} alt="A burst pipe alert with rapid repair support." />
-          <figcaption>Fast support for surprise issues</figcaption>
-        </figure>
-      </section>
+  const pageTitle = isOwner
+    ? 'Overview'
+    : isProvider
+      ? 'Inbox'
+      : (pageTitles[activeSection] ?? 'Dashboard')
 
+  return (
+    <main className={user ? 'app-shell layout-sidebar' : 'app-shell layout-centered'}>
       {!user ? (
-        <section className="card auth-card">
-          <h2>
-            {isSignUp ? 'Create account' : 'Log in'} (
-            {authRole === 'owner'
-              ? 'Owner'
-              : authRole === 'provider'
-                ? 'Provider'
-                : 'Homeowner'}
-            )
-          </h2>
-          <div className="role-toggle" role="group" aria-label="Choose login type">
-            <button
-              type="button"
-              className={authRole === 'customer' ? 'active' : ''}
-              onClick={() => setAuthRole('customer')}
-            >
-              Homeowner login
-            </button>
-            <button
-              type="button"
-              className={authRole === 'provider' ? 'active' : ''}
-              onClick={() => setAuthRole('provider')}
-            >
-              Provider login
-            </button>
-            <button
-              type="button"
-              className={authRole === 'owner' ? 'active' : ''}
-              onClick={() => setAuthRole('owner')}
-            >
-              Owner login
-            </button>
-          </div>
-          <form onSubmit={handleAuth} className="stack">
-            <label>
-              Email
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            <button disabled={isAuthBusy} type="submit">
-              {isAuthBusy ? 'Working…' : isSignUp ? 'Create account' : 'Log in'}
-            </button>
-          </form>
-          <button className="link-button" onClick={() => setIsSignUp((prev) => !prev)}>
-            {isSignUp ? 'Already have an account? Log in' : 'Need an account? Sign up'}
-          </button>
-          {authError && <p className="inline-error">{authError}</p>}
-        </section>
-      ) : (
         <>
-          <section className="dashboard-head card">
+          <header className="pre-login-header">
             <div>
-              <h2>Welcome, {user.email}</h2>
+              <div className="pre-login-logo">
+                <div className="logo-icon">🛡</div>
+                <h1>HomeGuardian</h1>
+              </div>
               <p>
-                {isOwner
-                  ? 'Your owner dashboard is ready with firm-level operational insight.'
-                  : isProvider
-                    ? 'Your provider dashboard is ready with incoming service requests.'
-                    : 'Your homeowner dashboard is ready for maintenance tracking.'}
+                Stop worrying about what might break next. We take care of the small fixes, routine
+                upkeep, and surprise issues—so your home stays running smoothly.
               </p>
             </div>
-            <button onClick={logout}>Log out</button>
+            <span className="mode-pill">{modeLabel}</span>
+          </header>
+          <section className="value-strip">
+            <span>🛠️ Small fixes handled</span>
+            <span>📅 Routine upkeep on schedule</span>
+            <span>🚨 Fast help for surprise issues</span>
           </section>
+          <section className="value-gallery" aria-label="Value proposition examples">
+            <figure className="value-image-card">
+              <img src={smallFixesImage} alt="A technician handling a quick home repair." />
+              <figcaption>Small fixes handled</figcaption>
+            </figure>
+            <figure className="value-image-card">
+              <img src={upkeepImage} alt="A homeowner checking routine upkeep tasks on a calendar." />
+              <figcaption>Routine upkeep on schedule</figcaption>
+            </figure>
+            <figure className="value-image-card">
+              <img src={surpriseIssueImage} alt="A burst pipe alert with rapid repair support." />
+              <figcaption>Fast support for surprise issues</figcaption>
+            </figure>
+          </section>
+          <section className="card auth-card">
+            <h2>
+              {isSignUp ? 'Create account' : 'Log in'} (
+              {authRole === 'owner' ? 'Owner' : authRole === 'provider' ? 'Provider' : 'Homeowner'})
+            </h2>
+            <div className="role-toggle" role="group" aria-label="Choose login type">
+              <button
+                type="button"
+                className={authRole === 'customer' ? 'active' : ''}
+                onClick={() => setAuthRole('customer')}
+              >
+                Homeowner
+              </button>
+              <button
+                type="button"
+                className={authRole === 'provider' ? 'active' : ''}
+                onClick={() => setAuthRole('provider')}
+              >
+                Provider
+              </button>
+              <button
+                type="button"
+                className={authRole === 'owner' ? 'active' : ''}
+                onClick={() => setAuthRole('owner')}
+              >
+                Owner
+              </button>
+            </div>
+            <form onSubmit={handleAuth} className="stack">
+              <label>
+                Email
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <button disabled={isAuthBusy} type="submit">
+                {isAuthBusy ? 'Working…' : isSignUp ? 'Create account' : 'Log in'}
+              </button>
+            </form>
+            <button className="link-button" onClick={() => setIsSignUp((prev) => !prev)}>
+              {isSignUp ? 'Already have an account? Log in' : 'Need an account? Sign up'}
+            </button>
+            {authError && <p className="inline-error">{authError}</p>}
+          </section>
+        </>
+      ) : (
+        <>
+          {/* Sidebar */}
+          <nav className="sidebar">
+            <div className="sidebar-brand">
+              <div className="sidebar-logo">
+                <div className="sidebar-logo-icon">🛡</div>
+                <span>HomeGuardian</span>
+              </div>
+              <p>
+                {isOwner
+                  ? 'Admin Dashboard'
+                  : isProvider
+                    ? 'Provider Dashboard'
+                    : 'Homeowner Dashboard'}
+              </p>
+            </div>
+            <div className="sidebar-nav">
+              {isOwner ? (
+                <button
+                  type="button"
+                  className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
+                  onClick={() => setActiveSection('overview')}
+                >
+                  <span className="nav-icon">📊</span> Overview
+                </button>
+              ) : isProvider ? (
+                <button
+                  type="button"
+                  className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
+                  onClick={() => setActiveSection('overview')}
+                >
+                  <span className="nav-icon">📬</span> Inbox
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('overview')}
+                  >
+                    <span className="nav-icon">📊</span> Overview
+                  </button>
+                  <button
+                    type="button"
+                    className={`nav-item ${activeSection === 'tasks' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('tasks')}
+                  >
+                    <span className="nav-icon">✅</span> Tasks
+                  </button>
+                  <button
+                    type="button"
+                    className={`nav-item ${activeSection === 'ai-diagnosis' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('ai-diagnosis')}
+                  >
+                    <span className="nav-icon">📸</span> AI Diagnosis
+                  </button>
+                  <button
+                    type="button"
+                    className={`nav-item ${activeSection === 'contractors' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('contractors')}
+                  >
+                    <span className="nav-icon">🔧</span> Contractors
+                  </button>
+                  <button
+                    type="button"
+                    className={`nav-item ${activeSection === 'profile' ? 'active' : ''}`}
+                    onClick={() => setActiveSection('profile')}
+                  >
+                    <span className="nav-icon">👤</span> Profile
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="sidebar-footer">
+              <span className="mode-pill">{modeLabel}</span>
+              <button type="button" className="btn-secondary" onClick={logout}>
+                Log out
+              </button>
+            </div>
+          </nav>
 
-          {isOwner ? (
-            <>
-              <section className="stats-grid">
-                <article className="card stat">
-                  <h3>Total request volume</h3>
-                  <p>{combinedRequestCount + serviceRequests.length}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Backlog rate</h3>
-                  <p>{backlogRate}%</p>
-                </article>
-                <article className="card stat">
-                  <h3>Completion rate</h3>
-                  <p>{completionRate}%</p>
-                </article>
-                <article className="card stat">
-                  <h3>Urgent findings</h3>
-                  <p>{urgentFindingCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>SLA risk items</h3>
-                  <p>{overdueTaskCount + dueSoonCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Accepted jobs</h3>
-                  <p>{acceptedServiceCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Pending dispatch</h3>
-                  <p>{pendingServiceCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Revenue</h3>
-                  <p>${totalServiceRevenue}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Avg ticket</h3>
-                  <p>${averageTicketValue}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Urgent incident rate</h3>
-                  <p>{urgentIncidentRate}%</p>
-                </article>
-                <article className="card stat">
-                  <h3>Done jobs created (7d)</h3>
-                  <p>{recentlyCreatedDoneCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Upcoming workload</h3>
-                  <p>{dueSoonCount}</p>
-                </article>
-              </section>
-              <section className="card">
-                <h2>Owner operations summary</h2>
-                <p>
-                  Track revenue, accepted jobs, dispatch pressure, and fulfillment health to run the
-                  business with clear operational visibility.
-                </p>
-                <ul className="analysis-list">
-                  {photoAnalyses.slice(0, 5).map((analysis) => (
-                    <li key={analysis.id}>
-                      <strong>{analysis.photo_name}</strong>
-                      <p>
-                        Severity:{' '}
-                        <span className={`severity-pill ${analysis.severity}`}>
-                          {analysis.severity}
-                        </span>
-                      </p>
-                      <small>{new Date(analysis.created_at).toLocaleString()}</small>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </>
-          ) : isProvider ? (
-            <>
-              <section className="stats-grid">
-                <article className="card stat">
-                  <h3>Inbox requests</h3>
-                  <p>{providerInboxRequests.length}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Awaiting acceptance</h3>
-                  <p>{pendingServiceCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Accepted jobs</h3>
-                  <p>
-                    {providerInboxRequests.filter((request) => request.status === 'accepted').length}
-                  </p>
-                </article>
-              </section>
-              <section className="card">
-                <h2>Provider request inbox</h2>
-                {providerInboxRequests.length === 0 ? (
-                  <p className="empty">No service requests yet.</p>
-                ) : (
-                  <ul className="analysis-list">
-                    {providerInboxRequests.map((request) => (
-                      <li key={request.id}>
-                        <strong>{request.service_type}</strong>
-                        <p>Preferred contractor: {request.contractor_name ?? 'Not specified'}</p>
-                        <p>Homeowner: {request.homeowner_email}</p>
-                        {request.notes && <p>Notes: {request.notes}</p>}
-                        <p>Status: {request.status}</p>
-                        <p>Estimated ticket: ${request.estimated_revenue}</p>
-                        {request.status === 'requested' && (
-                          <button type="button" onClick={() => acceptServiceRequest(request.id)}>
-                            Accept request
-                          </button>
-                        )}
-                        <small>{new Date(request.created_at).toLocaleString()}</small>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </>
-          ) : (
-            <>
-              <section className="stats-grid">
-                <article className="card stat">
-                  <h3>Open tasks</h3>
-                  <p>{openTaskCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Due in 7 days</h3>
-                  <p>{dueSoonCount}</p>
-                </article>
-                <article className="card stat">
-                  <h3>Total tasks</h3>
-                  <p>{tasks.length}</p>
-                </article>
-              </section>
-
-              <section className="grid-two">
-                <article className="card">
-                  <h2>Home profile</h2>
-                  <form onSubmit={saveProfile} className="stack">
-                    <label>
-                      Home type
-                      <input
-                        value={profile.home_type}
-                        onChange={(event) =>
-                          setProfile((prev) => ({ ...prev, home_type: event.target.value }))
-                        }
-                        placeholder="Single-family, condo, townhouse..."
-                      />
-                    </label>
-                    <label>
-                      Build year
-                      <input
-                        type="number"
-                        value={profile.build_year}
-                        onChange={(event) =>
-                          setProfile((prev) => ({ ...prev, build_year: event.target.value }))
-                        }
-                        placeholder="1998"
-                      />
-                    </label>
-                    <label>
-                      Household size
-                      <input
-                        type="number"
-                        value={profile.household_size}
-                        onChange={(event) =>
-                          setProfile((prev) => ({ ...prev, household_size: event.target.value }))
-                        }
-                        placeholder="4"
-                      />
-                    </label>
-                    <button type="submit">Save profile</button>
-                  </form>
-                </article>
-
-                <article className="card">
-                  <h2>AI live image interpretation</h2>
-                  <form className="stack" onSubmit={analyzeIssuePhoto}>
-                    <label>
-                      Upload issue photo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        required
-                        onChange={(event) => setIssuePhoto(event.target.files?.[0] ?? null)}
-                      />
-                    </label>
-                    <label>
-                      Optional notes
-                      <textarea
-                        rows={3}
-                        value={issueNotes}
-                        onChange={(event) => setIssueNotes(event.target.value)}
-                        placeholder="Example: Leak near upstairs bathroom after heavy rain."
-                      />
-                    </label>
-                    <button disabled={photoAnalysisBusy} type="submit">
-                      {photoAnalysisBusy ? 'Analyzing…' : 'Analyze photo'}
-                    </button>
-                  </form>
-                  {photoAnalysisError && <p className="inline-error">{photoAnalysisError}</p>}
-                  {photoAnalysisReply && <pre className="assistant-reply">{photoAnalysisReply}</pre>}
-                  <ul className="analysis-list">
-                    {photoAnalyses.slice(0, 5).map((analysis) => (
-                      <li key={analysis.id}>
-                        <strong>{analysis.photo_name}</strong>
-                        <p>
-                          Severity:{' '}
-                          <span className={`severity-pill ${analysis.severity}`}>
-                            {analysis.severity}
-                          </span>
-                        </p>
-                        <small>{new Date(analysis.created_at).toLocaleString()}</small>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-
-                <article className="card">
-                  <h2>Request a private contractor</h2>
-                  <form className="stack" onSubmit={submitServiceRequest}>
-                    <label>
-                      Choose contractor
-                      <select
-                        value={selectedContractorId}
-                        onChange={(event) => setSelectedContractorId(event.target.value)}
-                      >
-                        {privateContractors.map((contractor) => (
-                          <option key={contractor.id} value={contractor.id}>
-                            {contractor.name} · {contractor.specialty}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="contractor-options" aria-label="Private contractor options">
-                      {privateContractors.map((contractor) => (
-                        <article
-                          className={`contractor-card ${
-                            contractor.id === selectedContractorId ? 'selected' : ''
-                          }`}
-                          key={contractor.id}
-                        >
-                          <h3>{contractor.name}</h3>
-                          <p>{contractor.specialty}</p>
-                          <p>Rating: {contractor.rating}/5</p>
-                          <p>Response: {contractor.response_time}</p>
-                          <p>Area: {contractor.service_area}</p>
-                          <p>Starts at: ${contractor.starting_price}</p>
-                        </article>
+          {/* Main panel */}
+          <div className="main-panel">
+            <header className="main-header">
+              <div>
+                <h2>{pageTitle}</h2>
+                <p>{user.email}</p>
+              </div>
+            </header>
+            <div className="main-content">
+              {/* Owner dashboard */}
+              {isOwner && (
+                <>
+                  <section className="stats-grid">
+                    <article className="card stat">
+                      <h3>Total request volume</h3>
+                      <p>{combinedRequestCount + serviceRequests.length}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Backlog rate</h3>
+                      <p>{backlogRate}%</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Completion rate</h3>
+                      <p>{completionRate}%</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Urgent findings</h3>
+                      <p>{urgentFindingCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>SLA risk items</h3>
+                      <p>{overdueTaskCount + dueSoonCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Accepted jobs</h3>
+                      <p>{acceptedServiceCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Pending dispatch</h3>
+                      <p>{pendingServiceCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Revenue</h3>
+                      <p>${totalServiceRevenue}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Avg ticket</h3>
+                      <p>${averageTicketValue}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Urgent incident rate</h3>
+                      <p>{urgentIncidentRate}%</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Done jobs created (7d)</h3>
+                      <p>{recentlyCreatedDoneCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Upcoming workload</h3>
+                      <p>{dueSoonCount}</p>
+                    </article>
+                  </section>
+                  <section className="card">
+                    <h2>Owner operations summary</h2>
+                    <p>
+                      Track revenue, accepted jobs, dispatch pressure, and fulfillment health to run
+                      the business with clear operational visibility.
+                    </p>
+                    <ul className="analysis-list">
+                      {photoAnalyses.slice(0, 5).map((analysis) => (
+                        <li key={analysis.id}>
+                          <strong>{analysis.photo_name}</strong>
+                          <p>
+                            Severity:{' '}
+                            <span className={`severity-pill ${analysis.severity}`}>
+                              {analysis.severity}
+                            </span>
+                          </p>
+                          <small>{new Date(analysis.created_at).toLocaleString()}</small>
+                        </li>
                       ))}
-                    </div>
-                    <label>
-                      Service type
-                      <input
-                        required
-                        value={serviceType}
-                        onChange={(event) => setServiceType(event.target.value)}
-                        placeholder="Plumber"
-                      />
-                    </label>
-                    <label>
-                      Issue details
-                      <textarea
-                        rows={3}
-                        value={serviceRequestNotes}
-                        onChange={(event) => setServiceRequestNotes(event.target.value)}
-                        placeholder="Example: kitchen sink leaking under cabinet."
-                      />
-                    </label>
-                    <button type="submit">Send request</button>
-                  </form>
-                  <ul className="analysis-list">
-                    {homeownerRequests.slice(0, 8).map((request) => (
-                      <li key={request.id}>
-                        <strong>{request.service_type}</strong>
-                        <p>Contractor: {request.contractor_name ?? 'Not specified'}</p>
-                        <p>Status: {request.status}</p>
-                        <p>Estimated cost: ${request.estimated_revenue}</p>
-                        {request.provider_email && <p>Provider: {request.provider_email}</p>}
-                        <small>{new Date(request.created_at).toLocaleString()}</small>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              </section>
+                    </ul>
+                  </section>
+                </>
+              )}
 
-              <section className="card">
-                <h2>Maintenance tasks</h2>
-                <form onSubmit={addTask} className="task-form">
-                  <input
-                    required
-                    value={taskTitle}
-                    onChange={(event) => setTaskTitle(event.target.value)}
-                    placeholder="Task title"
-                  />
-                  <input
-                    value={taskDetails}
-                    onChange={(event) => setTaskDetails(event.target.value)}
-                    placeholder="Details"
-                  />
-                  <input
-                    type="date"
-                    value={taskDueDate}
-                    onChange={(event) => setTaskDueDate(event.target.value)}
-                  />
-                  <button type="submit">Add task</button>
-                </form>
+              {/* Provider dashboard */}
+              {isProvider && (
+                <>
+                  <section className="stats-grid">
+                    <article className="card stat">
+                      <h3>Inbox requests</h3>
+                      <p>{providerInboxRequests.length}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Awaiting acceptance</h3>
+                      <p>{pendingServiceCount}</p>
+                    </article>
+                    <article className="card stat">
+                      <h3>Accepted jobs</h3>
+                      <p>
+                        {
+                          providerInboxRequests.filter((request) => request.status === 'accepted')
+                            .length
+                        }
+                      </p>
+                    </article>
+                  </section>
+                  <section className="card">
+                    <h2>Provider request inbox</h2>
+                    {providerInboxRequests.length === 0 ? (
+                      <p className="empty">No service requests yet.</p>
+                    ) : (
+                      <ul className="analysis-list">
+                        {providerInboxRequests.map((request) => (
+                          <li key={request.id}>
+                            <strong>{request.service_type}</strong>
+                            <p>Preferred contractor: {request.contractor_name ?? 'Not specified'}</p>
+                            <p>Homeowner: {request.homeowner_email}</p>
+                            {request.notes && <p>Notes: {request.notes}</p>}
+                            <p>Status: {request.status}</p>
+                            <p>Estimated ticket: ${request.estimated_revenue}</p>
+                            {request.status === 'requested' && (
+                              <button
+                                type="button"
+                                onClick={() => acceptServiceRequest(request.id)}
+                              >
+                                Accept request
+                              </button>
+                            )}
+                            <small>{new Date(request.created_at).toLocaleString()}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </>
+              )}
 
-                {tasks.length === 0 ? (
-                  <p className="empty">No tasks yet. Add your first maintenance action.</p>
-                ) : (
-                  <ul className="task-list">
-                    {tasks.map((task) => (
-                      <li key={task.id} className={task.status === 'done' ? 'done' : ''}>
-                        <div>
-                          <strong>{task.title}</strong>
-                          {task.details && <p>{task.details}</p>}
-                          {task.due_date && <small>Due: {task.due_date}</small>}
+              {/* Homeowner dashboard */}
+              {!isOwner && !isProvider && (
+                <>
+                  {activeSection === 'overview' && (
+                    <section className="stats-grid">
+                      <article className="card stat">
+                        <h3>Open tasks</h3>
+                        <p>{openTaskCount}</p>
+                      </article>
+                      <article className="card stat">
+                        <h3>Due in 7 days</h3>
+                        <p>{dueSoonCount}</p>
+                      </article>
+                      <article className="card stat">
+                        <h3>Total tasks</h3>
+                        <p>{tasks.length}</p>
+                      </article>
+                    </section>
+                  )}
+
+                  {activeSection === 'tasks' && (
+                    <section className="card">
+                      <h2>Maintenance Tasks</h2>
+                      <form onSubmit={addTask} className="task-form">
+                        <input
+                          required
+                          value={taskTitle}
+                          onChange={(event) => setTaskTitle(event.target.value)}
+                          placeholder="Task title"
+                        />
+                        <input
+                          value={taskDetails}
+                          onChange={(event) => setTaskDetails(event.target.value)}
+                          placeholder="Details"
+                        />
+                        <input
+                          type="date"
+                          value={taskDueDate}
+                          onChange={(event) => setTaskDueDate(event.target.value)}
+                        />
+                        <button type="submit">Add task</button>
+                      </form>
+                      {tasks.length === 0 ? (
+                        <p className="empty">No tasks yet. Add your first maintenance action.</p>
+                      ) : (
+                        <ul className="task-list">
+                          {tasks.map((task) => (
+                            <li key={task.id} className={task.status === 'done' ? 'done' : ''}>
+                              <div>
+                                <strong>{task.title}</strong>
+                                {task.details && <p>{task.details}</p>}
+                                {task.due_date && <small>Due: {task.due_date}</small>}
+                              </div>
+                              <div className="task-actions">
+                                <button onClick={() => toggleTaskStatus(task)} type="button">
+                                  {task.status === 'open' ? 'Mark done' : 'Reopen'}
+                                </button>
+                                <button onClick={() => deleteTask(task)} type="button">
+                                  Delete
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
+
+                  {activeSection === 'ai-diagnosis' && (
+                    <article className="card">
+                      <h2>AI live image interpretation</h2>
+                      <form className="stack" onSubmit={analyzeIssuePhoto}>
+                        <label>
+                          Upload issue photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={(event) => setIssuePhoto(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        <label>
+                          Optional notes
+                          <textarea
+                            rows={3}
+                            value={issueNotes}
+                            onChange={(event) => setIssueNotes(event.target.value)}
+                            placeholder="Example: Leak near upstairs bathroom after heavy rain."
+                          />
+                        </label>
+                        <button disabled={photoAnalysisBusy} type="submit">
+                          {photoAnalysisBusy ? 'Analyzing…' : 'Analyze photo'}
+                        </button>
+                      </form>
+                      {photoAnalysisError && (
+                        <p className="inline-error">{photoAnalysisError}</p>
+                      )}
+                      {photoAnalysisReply && (
+                        <pre className="assistant-reply">{photoAnalysisReply}</pre>
+                      )}
+                      <ul className="analysis-list">
+                        {photoAnalyses.slice(0, 5).map((analysis) => (
+                          <li key={analysis.id}>
+                            <strong>{analysis.photo_name}</strong>
+                            <p>
+                              Severity:{' '}
+                              <span className={`severity-pill ${analysis.severity}`}>
+                                {analysis.severity}
+                              </span>
+                            </p>
+                            <small>{new Date(analysis.created_at).toLocaleString()}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  )}
+
+                  {activeSection === 'contractors' && (
+                    <article className="card">
+                      <h2>Request a private contractor</h2>
+                      <form className="stack" onSubmit={submitServiceRequest}>
+                        <label>
+                          Choose contractor
+                          <select
+                            value={selectedContractorId}
+                            onChange={(event) => setSelectedContractorId(event.target.value)}
+                          >
+                            {privateContractors.map((contractor) => (
+                              <option key={contractor.id} value={contractor.id}>
+                                {contractor.name} · {contractor.specialty}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="contractor-options" aria-label="Private contractor options">
+                          {privateContractors.map((contractor) => (
+                            <article
+                              className={`contractor-card ${
+                                contractor.id === selectedContractorId ? 'selected' : ''
+                              }`}
+                              key={contractor.id}
+                            >
+                              <h3>{contractor.name}</h3>
+                              <p>{contractor.specialty}</p>
+                              <p>Rating: {contractor.rating}/5</p>
+                              <p>Response: {contractor.response_time}</p>
+                              <p>Area: {contractor.service_area}</p>
+                              <p>Starts at: ${contractor.starting_price}</p>
+                            </article>
+                          ))}
                         </div>
-                        <div className="task-actions">
-                          <button onClick={() => toggleTaskStatus(task)} type="button">
-                            {task.status === 'open' ? 'Mark done' : 'Reopen'}
-                          </button>
-                          <button onClick={() => deleteTask(task)} type="button">
-                            Delete
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </>
-          )}
+                        <label>
+                          Service type
+                          <input
+                            required
+                            value={serviceType}
+                            onChange={(event) => setServiceType(event.target.value)}
+                            placeholder="Plumber"
+                          />
+                        </label>
+                        <label>
+                          Issue details
+                          <textarea
+                            rows={3}
+                            value={serviceRequestNotes}
+                            onChange={(event) => setServiceRequestNotes(event.target.value)}
+                            placeholder="Example: kitchen sink leaking under cabinet."
+                          />
+                        </label>
+                        <button type="submit">Send request</button>
+                      </form>
+                      <ul className="analysis-list">
+                        {homeownerRequests.slice(0, 8).map((request) => (
+                          <li key={request.id}>
+                            <strong>{request.service_type}</strong>
+                            <p>Contractor: {request.contractor_name ?? 'Not specified'}</p>
+                            <p>Status: {request.status}</p>
+                            <p>Estimated cost: ${request.estimated_revenue}</p>
+                            {request.provider_email && (
+                              <p>Provider: {request.provider_email}</p>
+                            )}
+                            <small>{new Date(request.created_at).toLocaleString()}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  )}
 
-          {dataError && <p className="inline-error">{dataError}</p>}
+                  {activeSection === 'profile' && (
+                    <article className="card">
+                      <h2>Home profile</h2>
+                      <form onSubmit={saveProfile} className="stack">
+                        <label>
+                          Home type
+                          <input
+                            value={profile.home_type}
+                            onChange={(event) =>
+                              setProfile((prev) => ({ ...prev, home_type: event.target.value }))
+                            }
+                            placeholder="Single-family, condo, townhouse..."
+                          />
+                        </label>
+                        <label>
+                          Build year
+                          <input
+                            type="number"
+                            value={profile.build_year}
+                            onChange={(event) =>
+                              setProfile((prev) => ({ ...prev, build_year: event.target.value }))
+                            }
+                            placeholder="1998"
+                          />
+                        </label>
+                        <label>
+                          Household size
+                          <input
+                            type="number"
+                            value={profile.household_size}
+                            onChange={(event) =>
+                              setProfile((prev) => ({
+                                ...prev,
+                                household_size: event.target.value,
+                              }))
+                            }
+                            placeholder="4"
+                          />
+                        </label>
+                        <button type="submit">Save profile</button>
+                      </form>
+                    </article>
+                  )}
+                </>
+              )}
+
+              {dataError && <p className="inline-error">{dataError}</p>}
+            </div>
+          </div>
         </>
       )}
     </main>
