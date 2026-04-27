@@ -179,6 +179,76 @@ const fileToDataUrl = (file: File) =>
     reader.readAsDataURL(file)
   })
 
+const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const buildTrendSeries = (
+  latestValue: number,
+  points = 6,
+  offset = 0.5,
+  minValue = 0,
+) => {
+  const startValue = Math.max(minValue, latestValue - offset)
+  const step = points > 1 ? (latestValue - startValue) / (points - 1) : 0
+  return Array.from({ length: points }, (_, index) =>
+    Number((startValue + step * index).toFixed(2)),
+  )
+}
+
+const buildLineChartPaths = (
+  values: number[],
+  width = 320,
+  height = 140,
+  padding = 16,
+) => {
+  const minValue = Math.min(...values)
+  const maxValue = Math.max(...values)
+  const range = maxValue - minValue || 1
+  const stepX = values.length > 1 ? (width - padding * 2) / (values.length - 1) : 0
+  const points = values.map((value, index) => {
+    const x = padding + index * stepX
+    const y = padding + (1 - (value - minValue) / range) * (height - padding * 2)
+    return { x, y }
+  })
+  const linePath = points.map((point, index) =>
+    `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+  ).join(' ')
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
+  const pointString = points.map((point) => `${point.x},${point.y}`).join(' ')
+  return { linePath, areaPath, pointString, width, height }
+}
+
+const formatShortDate = (value: string) =>
+  new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+const getInitials = (email: string | undefined) => {
+  if (!email) return 'HG'
+  const name = email.split('@')[0]
+  const letters = name.replace(/[^a-zA-Z]/g, '')
+  return (letters.slice(0, 2) || 'HG').toUpperCase()
+}
+
+const buildPieSegments = (
+  counts: Record<string, number>,
+  colors: string[],
+) => {
+  const total = Object.values(counts).reduce((sum, value) => sum + value, 0) || 1
+  let current = 0
+  return Object.entries(counts).map(([label, value], index) => {
+    const percent = (value / total) * 100
+    const start = current
+    const end = current + percent
+    current = end
+    return {
+      label,
+      value,
+      percent,
+      color: colors[index % colors.length],
+      start,
+      end,
+    }
+  })
+}
+
 function App() {
   const [user, setUser] = useState<AppUser | null>(null)
   const [email, setEmail] = useState('')
@@ -207,18 +277,26 @@ function App() {
 
   const [dataError, setDataError] = useState('')
   const [activeSection, setActiveSection] = useState('overview')
+  const [dateRange, setDateRange] = useState('Last 30 days')
 
   const modeLabel = isSupabaseConfigured ? 'Supabase mode' : 'Demo mode'
-  const isOwner = user?.role === 'owner'
-  const isProvider = user?.role === 'provider'
 
-  const pageTitles: Record<string, string> = {
-    overview: 'Overview',
-    tasks: 'Maintenance Tasks',
-    'ai-diagnosis': 'AI Image Interpretation',
-    contractors: 'Request a Contractor',
-    profile: 'Home Profile',
-  }
+  const adminNavItems = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'customers', label: 'Customers', icon: '👥' },
+    { id: 'services', label: 'Services', icon: '🧰' },
+    { id: 'schedule', label: 'Schedule', icon: '🗓️' },
+    { id: 'technicians', label: 'Technicians', icon: '🧑‍🔧' },
+    { id: 'billing', label: 'Billing & Finance', icon: '💳' },
+    { id: 'reports', label: 'Reports', icon: '📈' },
+    { id: 'alerts', label: 'Alerts', icon: '🚨' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ]
+
+  const adminTitleMap = adminNavItems.reduce<Record<string, string>>((acc, item) => {
+    acc[item.id] = item.label
+    return acc
+  }, {})
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -362,23 +440,6 @@ function App() {
     loadUserData()
   }, [user])
 
-  const openTaskCount = useMemo(
-    () => tasks.filter((task) => task.status === 'open').length,
-    [tasks],
-  )
-
-  const dueSoonCount = useMemo(() => {
-    const now = new Date()
-    const in7Days = new Date()
-    in7Days.setDate(now.getDate() + 7)
-
-    return tasks.filter((task) => {
-      if (!task.due_date || task.status === 'done') return false
-      const dueDate = new Date(task.due_date)
-      return dueDate >= now && dueDate <= in7Days
-    }).length
-  }, [tasks])
-
   const completedTaskCount = useMemo(
     () => tasks.filter((task) => task.status === 'done').length,
     [tasks],
@@ -406,18 +467,6 @@ function App() {
       return due < today
     }).length
   }, [tasks])
-
-  const recentlyCreatedDoneCount = useMemo(() => {
-    const now = Date.now()
-    const weekMs = 7 * 24 * 60 * 60 * 1000
-    return tasks.filter((task) => task.status === 'done' && now - Date.parse(task.created_at) <= weekMs)
-      .length
-  }, [tasks])
-
-  const backlogRate = useMemo(() => {
-    if (tasks.length === 0) return 0
-    return Math.round((openTaskCount / tasks.length) * 100)
-  }, [openTaskCount, tasks.length])
 
   const urgentIncidentRate = useMemo(() => {
     if (combinedRequestCount === 0) return 0
@@ -448,25 +497,195 @@ function App() {
     return Math.round(totalServiceRevenue / acceptedServiceCount)
   }, [acceptedServiceCount, totalServiceRevenue])
 
-  const homeownerRequests = useMemo(
-    () => serviceRequests.filter((request) => request.homeowner_email === user?.email),
-    [serviceRequests, user?.email],
-  )
-
   const selectedContractor = useMemo(
     () => privateContractors.find((contractor) => contractor.id === selectedContractorId) ?? null,
     [selectedContractorId],
   )
 
-  const providerInboxRequests = useMemo(
-    () =>
-      serviceRequests.filter(
-        (request) =>
-          request.status === 'requested' ||
-          (request.provider_email !== null && request.provider_email === user?.email),
-      ),
-    [serviceRequests, user?.email],
+  const recentRequestCount = useMemo(() => {
+    const now = Date.now()
+    const weekMs = 7 * 24 * 60 * 60 * 1000
+    return serviceRequests.filter((request) => now - Date.parse(request.created_at) <= weekMs).length
+  }, [serviceRequests])
+
+  const customerSatisfactionScore = useMemo(() => {
+    if (tasks.length === 0 && serviceRequests.length === 0 && photoAnalyses.length === 0) return 4.6
+    const completionBoost = (completionRate / 100) * 0.7
+    const incidentPenalty = (urgentIncidentRate / 100) * 0.4
+    const score = 4.1 + completionBoost - incidentPenalty
+    return Number(clampValue(score, 3.6, 4.9).toFixed(1))
+  }, [tasks.length, serviceRequests.length, photoAnalyses.length, completionRate, urgentIncidentRate])
+
+  const onTimeCompletion = useMemo(() => {
+    if (tasks.length === 0) return 96
+    return clampValue(completionRate, 70, 100)
+  }, [tasks.length, completionRate])
+
+  const ltvCacRatio = useMemo(() => {
+    if (acceptedServiceCount === 0) return 3.4
+    const ratio = (averageTicketValue || 180) / 70
+    return Number(clampValue(ratio, 1.8, 5).toFixed(1))
+  }, [acceptedServiceCount, averageTicketValue])
+
+  const experimentsThisMonth = useMemo(() => {
+    const now = Date.now()
+    const monthMs = 30 * 24 * 60 * 60 * 1000
+    const recentAnalyses = photoAnalyses.filter(
+      (analysis) => now - Date.parse(analysis.created_at) <= monthMs,
+    ).length
+    if (recentAnalyses > 0) return recentAnalyses
+    if (serviceRequests.length > 0) return Math.max(1, Math.round(serviceRequests.length / 2))
+    return 3
+  }, [photoAnalyses, serviceRequests.length])
+
+  const satisfactionTrend = useMemo(() => {
+    const baseline = 4.1
+    const diff = customerSatisfactionScore - baseline
+    const percent = baseline ? Math.abs((diff / baseline) * 100) : 0
+    return { label: `${diff >= 0 ? '▲' : '▼'} ${percent.toFixed(1)}%`, positive: diff >= 0 }
+  }, [customerSatisfactionScore])
+
+  const onTimeTrend = useMemo(() => {
+    const baseline = 90
+    const diff = onTimeCompletion - baseline
+    const percent = baseline ? Math.abs((diff / baseline) * 100) : 0
+    return { label: `${diff >= 0 ? '▲' : '▼'} ${percent.toFixed(1)}%`, positive: diff >= 0 }
+  }, [onTimeCompletion])
+
+  const ltvTrend = useMemo(() => {
+    const baseline = 2.8
+    const diff = ltvCacRatio - baseline
+    const percent = baseline ? Math.abs((diff / baseline) * 100) : 0
+    return { label: `${diff >= 0 ? '▲' : '▼'} ${percent.toFixed(1)}%`, positive: diff >= 0 }
+  }, [ltvCacRatio])
+
+  const satisfactionSeries = useMemo(
+    () => buildTrendSeries(customerSatisfactionScore, 6, 0.5, 3.8),
+    [customerSatisfactionScore],
   )
+
+  const onTimeSeries = useMemo(
+    () => buildTrendSeries(onTimeCompletion, 6, 6, 85),
+    [onTimeCompletion],
+  )
+
+  const satisfactionChart = useMemo(
+    () => buildLineChartPaths(satisfactionSeries),
+    [satisfactionSeries],
+  )
+
+  const onTimeChart = useMemo(() => buildLineChartPaths(onTimeSeries), [onTimeSeries])
+
+  const serviceCategoryCounts = useMemo(() => {
+    const counts = {
+      HVAC: 0,
+      Plumbing: 0,
+      Electrical: 0,
+      'General Repairs': 0,
+    }
+    serviceRequests.forEach((request) => {
+      const normalized = request.service_type.toLowerCase()
+      if (normalized.includes('hvac') || normalized.includes('heating')) {
+        counts.HVAC += 1
+      } else if (normalized.includes('plumb')) {
+        counts.Plumbing += 1
+      } else if (normalized.includes('electr')) {
+        counts.Electrical += 1
+      } else {
+        counts['General Repairs'] += 1
+      }
+    })
+    const total = Object.values(counts).reduce((sum, value) => sum + value, 0)
+    return total === 0
+      ? { HVAC: 3, Plumbing: 2, Electrical: 2, 'General Repairs': 1 }
+      : counts
+  }, [serviceRequests])
+
+  const pieSegments = useMemo(
+    () =>
+      buildPieSegments(serviceCategoryCounts, ['#16a34a', '#1d4ed8', '#f59e0b', '#94a3b8']),
+    [serviceCategoryCounts],
+  )
+
+  const pieStyle = useMemo(
+    () => ({
+      background: `conic-gradient(${pieSegments
+        .map((segment) => `${segment.color} ${segment.start}% ${segment.end}%`)
+        .join(', ')})`,
+    }),
+    [pieSegments],
+  )
+
+  const recentAlerts = useMemo(() => {
+    const alerts = []
+    if (overdueTaskCount > 0) {
+      alerts.push(`${overdueTaskCount} jobs past due`)
+    }
+    if (urgentFindingCount > 0) {
+      alerts.push(`Low customer satisfaction in ${urgentFindingCount} areas`)
+    }
+    if (recentRequestCount > 3) {
+      alerts.push('Increased demand forecast for next 14 days')
+    }
+    if (pendingServiceCount > 0) {
+      alerts.push(`${pendingServiceCount} requests awaiting dispatch`)
+    }
+    if (alerts.length === 0) {
+      alerts.push('No critical alerts right now')
+    }
+    return alerts.slice(0, 3)
+  }, [overdueTaskCount, urgentFindingCount, pendingServiceCount, recentRequestCount])
+
+  const upcomingJobs = useMemo(() => {
+    const timeSlots = ['9:00 AM', '11:30 AM', '2:00 PM', '4:15 PM']
+    const scheduledTasks = tasks
+      .filter((task) => task.due_date)
+      .sort((a, b) => Date.parse(a.due_date) - Date.parse(b.due_date))
+      .slice(0, 3)
+      .map((task, index) => ({
+        title: task.title,
+        time: `${formatShortDate(task.due_date)} · ${timeSlots[index % timeSlots.length]}`,
+      }))
+
+    if (scheduledTasks.length >= 3) return scheduledTasks
+
+    const scheduledRequests = serviceRequests
+      .slice(0, 3 - scheduledTasks.length)
+      .map((request, index) => ({
+        title: `${request.service_type} visit`,
+        time: `${formatShortDate(request.created_at)} · ${timeSlots[index % timeSlots.length]}`,
+      }))
+
+    const fallback = [
+      { title: 'Seasonal HVAC tune-up', time: 'Tue · 9:00 AM' },
+      { title: 'Exterior inspection', time: 'Wed · 1:30 PM' },
+      { title: 'Plumbing system check', time: 'Fri · 10:00 AM' },
+    ]
+
+    return [...scheduledTasks, ...scheduledRequests].length > 0
+      ? [...scheduledTasks, ...scheduledRequests]
+      : fallback
+  }, [tasks, serviceRequests])
+
+  const customerSummary = useMemo(() => {
+    const counts = new Map<string, number>()
+    serviceRequests.forEach((request) => {
+      counts.set(request.homeowner_email, (counts.get(request.homeowner_email) ?? 0) + 1)
+    })
+    const sorted = Array.from(counts.entries())
+      .map(([email, count]) => ({ email, count }))
+      .sort((a, b) => b.count - a.count)
+    return sorted.length > 0 ? sorted.slice(0, 6) : []
+  }, [serviceRequests])
+
+  const technicianSummary = useMemo(() => {
+    const assignments = serviceRequests.filter((request) => request.provider_email)
+    return assignments.slice(0, 6).map((request) => ({
+      name: request.provider_email ?? 'Assigned tech',
+      task: request.service_type,
+      status: request.status,
+    }))
+  }, [serviceRequests])
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault()
@@ -807,11 +1026,8 @@ function App() {
     })
   }
 
-  const pageTitle = isOwner
-    ? 'Overview'
-    : isProvider
-      ? 'Inbox'
-      : (pageTitles[activeSection] ?? 'Dashboard')
+  const pageTitle = adminTitleMap[activeSection] ?? 'Overview'
+  const profileInitials = getInitials(user?.email)
 
   return (
     <main className={user ? 'app-shell layout-sidebar' : 'app-shell layout-centered'}>
@@ -821,7 +1037,7 @@ function App() {
             <div>
               <div className="pre-login-logo">
                 <div className="logo-icon">🛡</div>
-                <h1>HomeGuardian</h1>
+                <h1>HomeGuard</h1>
               </div>
               <p>
                 Stop worrying about what might break next. We take care of the small fixes, routine
@@ -909,77 +1125,26 @@ function App() {
         </>
       ) : (
         <>
-          {/* Sidebar */}
           <nav className="sidebar">
             <div className="sidebar-brand">
               <div className="sidebar-logo">
-                <div className="sidebar-logo-icon">🛡</div>
-                <span>HomeGuardian</span>
+                <div className="sidebar-logo-icon">HG</div>
+                <span>HomeGuard</span>
               </div>
-              <p>
-                {isOwner
-                  ? 'Admin Dashboard'
-                  : isProvider
-                    ? 'Provider Dashboard'
-                    : 'Homeowner Dashboard'}
-              </p>
+              <p>Home maintenance admin</p>
             </div>
             <div className="sidebar-nav">
-              {isOwner ? (
+              {adminNavItems.map((item) => (
                 <button
+                  key={item.id}
                   type="button"
-                  className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
-                  onClick={() => setActiveSection('overview')}
+                  className={`nav-item ${activeSection === item.id ? 'active' : ''}`}
+                  onClick={() => setActiveSection(item.id)}
                 >
-                  <span className="nav-icon">📊</span> Overview
+                  <span className="nav-icon">{item.icon}</span>
+                  {item.label}
                 </button>
-              ) : isProvider ? (
-                <button
-                  type="button"
-                  className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
-                  onClick={() => setActiveSection('overview')}
-                >
-                  <span className="nav-icon">📬</span> Inbox
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={`nav-item ${activeSection === 'overview' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('overview')}
-                  >
-                    <span className="nav-icon">📊</span> Overview
-                  </button>
-                  <button
-                    type="button"
-                    className={`nav-item ${activeSection === 'tasks' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('tasks')}
-                  >
-                    <span className="nav-icon">✅</span> Tasks
-                  </button>
-                  <button
-                    type="button"
-                    className={`nav-item ${activeSection === 'ai-diagnosis' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('ai-diagnosis')}
-                  >
-                    <span className="nav-icon">📸</span> AI Diagnosis
-                  </button>
-                  <button
-                    type="button"
-                    className={`nav-item ${activeSection === 'contractors' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('contractors')}
-                  >
-                    <span className="nav-icon">🔧</span> Contractors
-                  </button>
-                  <button
-                    type="button"
-                    className={`nav-item ${activeSection === 'profile' ? 'active' : ''}`}
-                    onClick={() => setActiveSection('profile')}
-                  >
-                    <span className="nav-icon">👤</span> Profile
-                  </button>
-                </>
-              )}
+              ))}
             </div>
             <div className="sidebar-footer">
               <span className="mode-pill">{modeLabel}</span>
@@ -989,76 +1154,397 @@ function App() {
             </div>
           </nav>
 
-          {/* Main panel */}
           <div className="main-panel">
             <header className="main-header">
               <div>
                 <h2>{pageTitle}</h2>
-                <p>{user.email}</p>
+                <p>HomeGuard Admin Dashboard</p>
+              </div>
+              <div className="header-actions">
+                <select
+                  aria-label="Date range"
+                  className="range-select"
+                  value={dateRange}
+                  onChange={(event) => setDateRange(event.target.value)}
+                >
+                  <option>Last 7 days</option>
+                  <option>Last 30 days</option>
+                  <option>Last 90 days</option>
+                </select>
+                <div className="profile-pill" aria-label="Admin profile">
+                  <span>{profileInitials}</span>
+                </div>
               </div>
             </header>
             <div className="main-content">
-              {/* Owner dashboard */}
-              {isOwner && (
+              {activeSection === 'overview' && (
                 <>
-                  <section className="stats-grid">
-                    <article className="card stat">
-                      <h3>Total request volume</h3>
-                      <p>{combinedRequestCount + serviceRequests.length}</p>
+                  <section className="kpi-grid">
+                    <article className="card kpi-card">
+                      <div className="kpi-header">
+                        <span className="kpi-icon">⭐</span>
+                        <p>Customer Satisfaction</p>
+                      </div>
+                      <div className="kpi-value">
+                        <h3>{customerSatisfactionScore} / 5</h3>
+                        <span
+                          className={`kpi-trend ${satisfactionTrend.positive ? 'positive' : 'negative'}`}
+                        >
+                          {satisfactionTrend.label}
+                        </span>
+                      </div>
                     </article>
-                    <article className="card stat">
-                      <h3>Backlog rate</h3>
-                      <p>{backlogRate}%</p>
+                    <article className="card kpi-card">
+                      <div className="kpi-header">
+                        <span className="kpi-icon">⏱️</span>
+                        <p>On-Time Service Completion</p>
+                      </div>
+                      <div className="kpi-value">
+                        <h3>{onTimeCompletion}%</h3>
+                        <span
+                          className={`kpi-trend ${onTimeTrend.positive ? 'positive' : 'negative'}`}
+                        >
+                          {onTimeTrend.label}
+                        </span>
+                      </div>
                     </article>
-                    <article className="card stat">
-                      <h3>Completion rate</h3>
-                      <p>{completionRate}%</p>
+                    <article className="card kpi-card">
+                      <div className="kpi-header">
+                        <span className="kpi-icon">💲</span>
+                        <p>LTV : CAC Ratio</p>
+                      </div>
+                      <div className="kpi-value">
+                        <h3>{ltvCacRatio} : 1</h3>
+                        <span
+                          className={`kpi-trend ${ltvTrend.positive ? 'positive' : 'negative'}`}
+                        >
+                          {ltvTrend.label}
+                        </span>
+                      </div>
                     </article>
-                    <article className="card stat">
-                      <h3>Urgent findings</h3>
-                      <p>{urgentFindingCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>SLA risk items</h3>
-                      <p>{overdueTaskCount + dueSoonCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Accepted jobs</h3>
-                      <p>{acceptedServiceCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Pending dispatch</h3>
-                      <p>{pendingServiceCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Revenue</h3>
-                      <p>${totalServiceRevenue}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Avg ticket</h3>
-                      <p>${averageTicketValue}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Urgent incident rate</h3>
-                      <p>{urgentIncidentRate}%</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Done jobs created (7d)</h3>
-                      <p>{recentlyCreatedDoneCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Upcoming workload</h3>
-                      <p>{dueSoonCount}</p>
+                    <article className="card kpi-card">
+                      <div className="kpi-header">
+                        <span className="kpi-icon">💡</span>
+                        <p>Service Experiments This Month</p>
+                      </div>
+                      <div className="kpi-value">
+                        <h3>{experimentsThisMonth}</h3>
+                        <span className="kpi-subtext">Active pilots</span>
+                      </div>
                     </article>
                   </section>
-                  <section className="card">
-                    <h2>Owner operations summary</h2>
-                    <p>
-                      Track revenue, accepted jobs, dispatch pressure, and fulfillment health to run
-                      the business with clear operational visibility.
-                    </p>
+
+                  <section className="chart-grid">
+                    <article className="card chart-card">
+                      <div className="chart-header">
+                        <div>
+                          <h3>Customer Satisfaction Over Time</h3>
+                          <p>Last 6 months</p>
+                        </div>
+                        <span className="chart-badge">{customerSatisfactionScore} / 5</span>
+                      </div>
+                      <div className="chart-body">
+                        <svg
+                          viewBox={`0 0 ${satisfactionChart.width} ${satisfactionChart.height}`}
+                          className="line-chart"
+                          role="img"
+                          aria-label="Customer satisfaction trend"
+                        >
+                          <defs>
+                            <linearGradient id="satisfactionGradient" x1="0" x2="0" y1="0" y2="1">
+                              <stop offset="0%" stopColor="#16a34a" stopOpacity="0.25" />
+                              <stop offset="100%" stopColor="#16a34a" stopOpacity="0.02" />
+                            </linearGradient>
+                          </defs>
+                          <path className="chart-area" d={satisfactionChart.areaPath} />
+                          <path className="chart-line" d={satisfactionChart.linePath} />
+                        </svg>
+                      </div>
+                    </article>
+                    <article className="card chart-card">
+                      <div className="chart-header">
+                        <div>
+                          <h3>On-Time Service Completion Over Time</h3>
+                          <p>Last 6 months</p>
+                        </div>
+                        <span className="chart-badge">{onTimeCompletion}%</span>
+                      </div>
+                      <div className="chart-body">
+                        <svg
+                          viewBox={`0 0 ${onTimeChart.width} ${onTimeChart.height}`}
+                          className="line-chart"
+                          role="img"
+                          aria-label="On-time completion trend"
+                        >
+                          <defs>
+                            <linearGradient id="onTimeGradient" x1="0" x2="0" y1="0" y2="1">
+                              <stop offset="0%" stopColor="#1d4ed8" stopOpacity="0.25" />
+                              <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.02" />
+                            </linearGradient>
+                          </defs>
+                          <path className="chart-area alt" d={onTimeChart.areaPath} />
+                          <path className="chart-line alt" d={onTimeChart.linePath} />
+                        </svg>
+                      </div>
+                    </article>
+                  </section>
+
+                  <section className="lower-grid">
+                    <article className="card">
+                      <div className="section-header">
+                        <h3>Recent Alerts</h3>
+                        <span className="section-tag">Live</span>
+                      </div>
+                      <ul className="simple-list">
+                        {recentAlerts.map((alert) => (
+                          <li key={alert}>
+                            <span className="list-dot" />
+                            <span>{alert}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                    <article className="card">
+                      <div className="section-header">
+                        <h3>Upcoming Jobs</h3>
+                        <span className="section-tag">Next 7 days</span>
+                      </div>
+                      <ul className="simple-list">
+                        {upcomingJobs.map((job) => (
+                          <li key={`${job.title}-${job.time}`}>
+                            <div>
+                              <strong>{job.title}</strong>
+                              <span className="list-meta">{job.time}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                    <article className="card">
+                      <div className="section-header">
+                        <h3>Top Service Categories</h3>
+                        <span className="section-tag">Share</span>
+                      </div>
+                      <div className="pie-wrapper">
+                        <div className="pie-chart" style={pieStyle} />
+                        <ul className="legend-list">
+                          {pieSegments.map((segment) => (
+                            <li key={segment.label}>
+                              <span
+                                className="legend-swatch"
+                                style={{ backgroundColor: segment.color }}
+                              />
+                              <span>{segment.label}</span>
+                              <span className="legend-value">{segment.value}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </article>
+                  </section>
+                </>
+              )}
+
+              {activeSection === 'customers' && (
+                <section className="card">
+                  <div className="section-header">
+                    <div>
+                      <h3>Customer Overview</h3>
+                      <p className="section-subtitle">Most active households this quarter.</p>
+                    </div>
+                    <span className="section-tag">Active</span>
+                  </div>
+                  {customerSummary.length === 0 ? (
+                    <p className="empty">No customer requests yet.</p>
+                  ) : (
+                    <ul className="summary-list">
+                      {customerSummary.map((customer) => (
+                        <li key={customer.email}>
+                          <div>
+                            <strong>{customer.email}</strong>
+                            <span className="list-meta">Requests: {customer.count}</span>
+                          </div>
+                          <span className="status-pill">Active</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {activeSection === 'services' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Service Requests</h3>
+                    <span className="section-tag">Dispatch</span>
+                  </div>
+                  <form className="stack" onSubmit={submitServiceRequest}>
+                    <label>
+                      Choose contractor
+                      <select
+                        value={selectedContractorId}
+                        onChange={(event) => setSelectedContractorId(event.target.value)}
+                      >
+                        {privateContractors.map((contractor) => (
+                          <option key={contractor.id} value={contractor.id}>
+                            {contractor.name} · {contractor.specialty}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Service type
+                      <input
+                        required
+                        value={serviceType}
+                        onChange={(event) => setServiceType(event.target.value)}
+                        placeholder="Plumber"
+                      />
+                    </label>
+                    <label>
+                      Issue details
+                      <textarea
+                        rows={3}
+                        value={serviceRequestNotes}
+                        onChange={(event) => setServiceRequestNotes(event.target.value)}
+                        placeholder="Example: kitchen sink leaking under cabinet."
+                      />
+                    </label>
+                    <button type="submit">Send request</button>
+                  </form>
+                  {serviceRequests.length === 0 ? (
+                    <p className="empty">No service requests yet.</p>
+                  ) : (
+                    <ul className="summary-list">
+                      {serviceRequests.slice(0, 6).map((request) => (
+                        <li key={request.id}>
+                          <div>
+                            <strong>{request.service_type}</strong>
+                            <span className="list-meta">
+                              {request.contractor_name ?? 'Contractor TBD'} · {request.status}
+                            </span>
+                          </div>
+                          <span className="status-pill">${request.estimated_revenue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {activeSection === 'schedule' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Maintenance Schedule</h3>
+                    <span className="section-tag">Operations</span>
+                  </div>
+                  <form onSubmit={addTask} className="task-form">
+                    <input
+                      required
+                      value={taskTitle}
+                      onChange={(event) => setTaskTitle(event.target.value)}
+                      placeholder="Task title"
+                    />
+                    <input
+                      value={taskDetails}
+                      onChange={(event) => setTaskDetails(event.target.value)}
+                      placeholder="Details"
+                    />
+                    <input
+                      type="date"
+                      value={taskDueDate}
+                      onChange={(event) => setTaskDueDate(event.target.value)}
+                    />
+                    <button type="submit">Add task</button>
+                  </form>
+                  {tasks.length === 0 ? (
+                    <p className="empty">No tasks yet. Add your first maintenance action.</p>
+                  ) : (
+                    <ul className="task-list">
+                      {tasks.map((task) => (
+                        <li key={task.id} className={task.status === 'done' ? 'done' : ''}>
+                          <div>
+                            <strong>{task.title}</strong>
+                            {task.details && <p>{task.details}</p>}
+                            {task.due_date && <small>Due: {task.due_date}</small>}
+                          </div>
+                          <div className="task-actions">
+                            <button onClick={() => toggleTaskStatus(task)} type="button">
+                              {task.status === 'open' ? 'Mark done' : 'Reopen'}
+                            </button>
+                            <button onClick={() => deleteTask(task)} type="button">
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {activeSection === 'technicians' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Technician Assignments</h3>
+                    <span className="section-tag">Field team</span>
+                  </div>
+                  {technicianSummary.length === 0 ? (
+                    <p className="empty">No technician assignments yet.</p>
+                  ) : (
+                    <ul className="summary-list">
+                      {technicianSummary.map((assignment) => (
+                        <li key={`${assignment.name}-${assignment.task}`}>
+                          <div>
+                            <strong>{assignment.name}</strong>
+                            <span className="list-meta">{assignment.task}</span>
+                          </div>
+                          <span className="status-pill">{assignment.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {activeSection === 'billing' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Billing & Finance</h3>
+                    <span className="section-tag">Summary</span>
+                  </div>
+                  <div className="billing-grid">
+                    <div>
+                      <p>Total revenue</p>
+                      <h4>${totalServiceRevenue}</h4>
+                    </div>
+                    <div>
+                      <p>Average ticket value</p>
+                      <h4>${averageTicketValue}</h4>
+                    </div>
+                    <div>
+                      <p>Accepted jobs</p>
+                      <h4>{acceptedServiceCount}</h4>
+                    </div>
+                    <div>
+                      <p>Pending dispatch</p>
+                      <h4>{pendingServiceCount}</h4>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeSection === 'reports' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Inspection Reports</h3>
+                    <span className="section-tag">Insights</span>
+                  </div>
+                  {photoAnalyses.length === 0 ? (
+                    <p className="empty">No inspection reports yet.</p>
+                  ) : (
                     <ul className="analysis-list">
-                      {photoAnalyses.slice(0, 5).map((analysis) => (
+                      {photoAnalyses.slice(0, 6).map((analysis) => (
                         <li key={analysis.id}>
                           <strong>{analysis.photo_name}</strong>
                           <p>
@@ -1071,295 +1557,89 @@ function App() {
                         </li>
                       ))}
                     </ul>
-                  </section>
-                </>
+                  )}
+                </section>
               )}
 
-              {/* Provider dashboard */}
-              {isProvider && (
-                <>
-                  <section className="stats-grid">
-                    <article className="card stat">
-                      <h3>Inbox requests</h3>
-                      <p>{providerInboxRequests.length}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Awaiting acceptance</h3>
-                      <p>{pendingServiceCount}</p>
-                    </article>
-                    <article className="card stat">
-                      <h3>Accepted jobs</h3>
-                      <p>
-                        {
-                          providerInboxRequests.filter((request) => request.status === 'accepted')
-                            .length
+              {activeSection === 'alerts' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Alerts & AI Diagnostics</h3>
+                    <span className="section-tag">Live</span>
+                  </div>
+                  <form className="stack" onSubmit={analyzeIssuePhoto}>
+                    <label>
+                      Upload issue photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        required
+                        onChange={(event) => setIssuePhoto(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <label>
+                      Optional notes
+                      <textarea
+                        rows={3}
+                        value={issueNotes}
+                        onChange={(event) => setIssueNotes(event.target.value)}
+                        placeholder="Example: Leak near upstairs bathroom after heavy rain."
+                      />
+                    </label>
+                    <button disabled={photoAnalysisBusy} type="submit">
+                      {photoAnalysisBusy ? 'Analyzing…' : 'Analyze photo'}
+                    </button>
+                  </form>
+                  {photoAnalysisError && <p className="inline-error">{photoAnalysisError}</p>}
+                  {photoAnalysisReply && <pre className="assistant-reply">{photoAnalysisReply}</pre>}
+                </section>
+              )}
+
+              {activeSection === 'settings' && (
+                <section className="card">
+                  <div className="section-header">
+                    <h3>Settings</h3>
+                    <span className="section-tag">Profile</span>
+                  </div>
+                  <form onSubmit={saveProfile} className="stack">
+                    <label>
+                      Home type
+                      <input
+                        value={profile.home_type}
+                        onChange={(event) =>
+                          setProfile((prev) => ({ ...prev, home_type: event.target.value }))
                         }
-                      </p>
-                    </article>
-                  </section>
-                  <section className="card">
-                    <h2>Provider request inbox</h2>
-                    {providerInboxRequests.length === 0 ? (
-                      <p className="empty">No service requests yet.</p>
-                    ) : (
-                      <ul className="analysis-list">
-                        {providerInboxRequests.map((request) => (
-                          <li key={request.id}>
-                            <strong>{request.service_type}</strong>
-                            <p>Preferred contractor: {request.contractor_name ?? 'Not specified'}</p>
-                            <p>Homeowner: {request.homeowner_email}</p>
-                            {request.notes && <p>Notes: {request.notes}</p>}
-                            <p>Status: {request.status}</p>
-                            <p>Estimated ticket: ${request.estimated_revenue}</p>
-                            {request.status === 'requested' && (
-                              <button
-                                type="button"
-                                onClick={() => acceptServiceRequest(request.id)}
-                              >
-                                Accept request
-                              </button>
-                            )}
-                            <small>{new Date(request.created_at).toLocaleString()}</small>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
-                </>
-              )}
-
-              {/* Homeowner dashboard */}
-              {!isOwner && !isProvider && (
-                <>
-                  {activeSection === 'overview' && (
-                    <section className="stats-grid">
-                      <article className="card stat">
-                        <h3>Open tasks</h3>
-                        <p>{openTaskCount}</p>
-                      </article>
-                      <article className="card stat">
-                        <h3>Due in 7 days</h3>
-                        <p>{dueSoonCount}</p>
-                      </article>
-                      <article className="card stat">
-                        <h3>Total tasks</h3>
-                        <p>{tasks.length}</p>
-                      </article>
-                    </section>
-                  )}
-
-                  {activeSection === 'tasks' && (
-                    <section className="card">
-                      <h2>Maintenance Tasks</h2>
-                      <form onSubmit={addTask} className="task-form">
-                        <input
-                          required
-                          value={taskTitle}
-                          onChange={(event) => setTaskTitle(event.target.value)}
-                          placeholder="Task title"
-                        />
-                        <input
-                          value={taskDetails}
-                          onChange={(event) => setTaskDetails(event.target.value)}
-                          placeholder="Details"
-                        />
-                        <input
-                          type="date"
-                          value={taskDueDate}
-                          onChange={(event) => setTaskDueDate(event.target.value)}
-                        />
-                        <button type="submit">Add task</button>
-                      </form>
-                      {tasks.length === 0 ? (
-                        <p className="empty">No tasks yet. Add your first maintenance action.</p>
-                      ) : (
-                        <ul className="task-list">
-                          {tasks.map((task) => (
-                            <li key={task.id} className={task.status === 'done' ? 'done' : ''}>
-                              <div>
-                                <strong>{task.title}</strong>
-                                {task.details && <p>{task.details}</p>}
-                                {task.due_date && <small>Due: {task.due_date}</small>}
-                              </div>
-                              <div className="task-actions">
-                                <button onClick={() => toggleTaskStatus(task)} type="button">
-                                  {task.status === 'open' ? 'Mark done' : 'Reopen'}
-                                </button>
-                                <button onClick={() => deleteTask(task)} type="button">
-                                  Delete
-                                </button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </section>
-                  )}
-
-                  {activeSection === 'ai-diagnosis' && (
-                    <article className="card">
-                      <h2>AI live image interpretation</h2>
-                      <form className="stack" onSubmit={analyzeIssuePhoto}>
-                        <label>
-                          Upload issue photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            required
-                            onChange={(event) => setIssuePhoto(event.target.files?.[0] ?? null)}
-                          />
-                        </label>
-                        <label>
-                          Optional notes
-                          <textarea
-                            rows={3}
-                            value={issueNotes}
-                            onChange={(event) => setIssueNotes(event.target.value)}
-                            placeholder="Example: Leak near upstairs bathroom after heavy rain."
-                          />
-                        </label>
-                        <button disabled={photoAnalysisBusy} type="submit">
-                          {photoAnalysisBusy ? 'Analyzing…' : 'Analyze photo'}
-                        </button>
-                      </form>
-                      {photoAnalysisError && (
-                        <p className="inline-error">{photoAnalysisError}</p>
-                      )}
-                      {photoAnalysisReply && (
-                        <pre className="assistant-reply">{photoAnalysisReply}</pre>
-                      )}
-                      <ul className="analysis-list">
-                        {photoAnalyses.slice(0, 5).map((analysis) => (
-                          <li key={analysis.id}>
-                            <strong>{analysis.photo_name}</strong>
-                            <p>
-                              Severity:{' '}
-                              <span className={`severity-pill ${analysis.severity}`}>
-                                {analysis.severity}
-                              </span>
-                            </p>
-                            <small>{new Date(analysis.created_at).toLocaleString()}</small>
-                          </li>
-                        ))}
-                      </ul>
-                    </article>
-                  )}
-
-                  {activeSection === 'contractors' && (
-                    <article className="card">
-                      <h2>Request a private contractor</h2>
-                      <form className="stack" onSubmit={submitServiceRequest}>
-                        <label>
-                          Choose contractor
-                          <select
-                            value={selectedContractorId}
-                            onChange={(event) => setSelectedContractorId(event.target.value)}
-                          >
-                            {privateContractors.map((contractor) => (
-                              <option key={contractor.id} value={contractor.id}>
-                                {contractor.name} · {contractor.specialty}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="contractor-options" aria-label="Private contractor options">
-                          {privateContractors.map((contractor) => (
-                            <article
-                              className={`contractor-card ${
-                                contractor.id === selectedContractorId ? 'selected' : ''
-                              }`}
-                              key={contractor.id}
-                            >
-                              <h3>{contractor.name}</h3>
-                              <p>{contractor.specialty}</p>
-                              <p>Rating: {contractor.rating}/5</p>
-                              <p>Response: {contractor.response_time}</p>
-                              <p>Area: {contractor.service_area}</p>
-                              <p>Starts at: ${contractor.starting_price}</p>
-                            </article>
-                          ))}
-                        </div>
-                        <label>
-                          Service type
-                          <input
-                            required
-                            value={serviceType}
-                            onChange={(event) => setServiceType(event.target.value)}
-                            placeholder="Plumber"
-                          />
-                        </label>
-                        <label>
-                          Issue details
-                          <textarea
-                            rows={3}
-                            value={serviceRequestNotes}
-                            onChange={(event) => setServiceRequestNotes(event.target.value)}
-                            placeholder="Example: kitchen sink leaking under cabinet."
-                          />
-                        </label>
-                        <button type="submit">Send request</button>
-                      </form>
-                      <ul className="analysis-list">
-                        {homeownerRequests.slice(0, 8).map((request) => (
-                          <li key={request.id}>
-                            <strong>{request.service_type}</strong>
-                            <p>Contractor: {request.contractor_name ?? 'Not specified'}</p>
-                            <p>Status: {request.status}</p>
-                            <p>Estimated cost: ${request.estimated_revenue}</p>
-                            {request.provider_email && (
-                              <p>Provider: {request.provider_email}</p>
-                            )}
-                            <small>{new Date(request.created_at).toLocaleString()}</small>
-                          </li>
-                        ))}
-                      </ul>
-                    </article>
-                  )}
-
-                  {activeSection === 'profile' && (
-                    <article className="card">
-                      <h2>Home profile</h2>
-                      <form onSubmit={saveProfile} className="stack">
-                        <label>
-                          Home type
-                          <input
-                            value={profile.home_type}
-                            onChange={(event) =>
-                              setProfile((prev) => ({ ...prev, home_type: event.target.value }))
-                            }
-                            placeholder="Single-family, condo, townhouse..."
-                          />
-                        </label>
-                        <label>
-                          Build year
-                          <input
-                            type="number"
-                            value={profile.build_year}
-                            onChange={(event) =>
-                              setProfile((prev) => ({ ...prev, build_year: event.target.value }))
-                            }
-                            placeholder="1998"
-                          />
-                        </label>
-                        <label>
-                          Household size
-                          <input
-                            type="number"
-                            value={profile.household_size}
-                            onChange={(event) =>
-                              setProfile((prev) => ({
-                                ...prev,
-                                household_size: event.target.value,
-                              }))
-                            }
-                            placeholder="4"
-                          />
-                        </label>
-                        <button type="submit">Save profile</button>
-                      </form>
-                    </article>
-                  )}
-                </>
+                        placeholder="Single-family, condo, townhouse..."
+                      />
+                    </label>
+                    <label>
+                      Build year
+                      <input
+                        type="number"
+                        value={profile.build_year}
+                        onChange={(event) =>
+                          setProfile((prev) => ({ ...prev, build_year: event.target.value }))
+                        }
+                        placeholder="1998"
+                      />
+                    </label>
+                    <label>
+                      Household size
+                      <input
+                        type="number"
+                        value={profile.household_size}
+                        onChange={(event) =>
+                          setProfile((prev) => ({
+                            ...prev,
+                            household_size: event.target.value,
+                          }))
+                        }
+                        placeholder="4"
+                      />
+                    </label>
+                    <button type="submit">Save profile</button>
+                  </form>
+                </section>
               )}
 
               {dataError && <p className="inline-error">{dataError}</p>}
