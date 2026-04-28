@@ -617,21 +617,25 @@ function App() {
   )
 
   const recentAlerts = useMemo(() => {
-    const alerts = []
+    const alerts: string[] = []
     if (overdueTaskCount > 0) {
-      alerts.push(`${overdueTaskCount} jobs past due`)
+      alerts.push(overdueTaskCount === 1 ? 'Job past due' : `${overdueTaskCount} jobs past due`)
     }
     if (urgentFindingCount > 0) {
-      alerts.push(`Low customer satisfaction in ${urgentFindingCount} areas`)
+      alerts.push(
+        urgentFindingCount === 1
+          ? 'Low customer satisfaction in one area'
+          : `Low customer satisfaction in ${urgentFindingCount} areas`,
+      )
     }
     if (recentRequestCount > 3) {
-      alerts.push('Increased demand forecast for next 14 days')
+      alerts.push('Increased demand forecast')
     }
     if (pendingServiceCount > 0) {
       alerts.push(`${pendingServiceCount} requests awaiting dispatch`)
     }
     if (alerts.length === 0) {
-      alerts.push('No critical alerts right now')
+      return ['Jobs past due', 'Low customer satisfaction in one area', 'Increased demand forecast']
     }
     return alerts.slice(0, 3)
   }, [overdueTaskCount, urgentFindingCount, pendingServiceCount, recentRequestCount])
