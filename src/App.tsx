@@ -516,6 +516,13 @@ function App() {
     return Number(clampValue(score, 3.6, 4.9).toFixed(1))
   }, [tasks.length, serviceRequests.length, photoAnalyses.length, completionRate, urgentIncidentRate])
 
+  const lowSatisfactionCount = useMemo(() => {
+    if (customerSatisfactionScore >= 4.5) return 0
+    if (customerSatisfactionScore >= 4.3) return 1
+    if (customerSatisfactionScore >= 4.1) return 2
+    return 3
+  }, [customerSatisfactionScore])
+
   const onTimeCompletion = useMemo(() => {
     if (tasks.length === 0) return 96
     return clampValue(completionRate, 70, 100)
@@ -621,11 +628,11 @@ function App() {
     if (overdueTaskCount > 0) {
       alerts.push(overdueTaskCount === 1 ? 'Job past due' : `${overdueTaskCount} jobs past due`)
     }
-    if (urgentFindingCount > 0) {
+    if (lowSatisfactionCount > 0) {
       alerts.push(
-        urgentFindingCount === 1
+        lowSatisfactionCount === 1
           ? 'Low customer satisfaction in one area'
-          : `Low customer satisfaction in ${urgentFindingCount} areas`,
+          : `Low customer satisfaction in ${lowSatisfactionCount} areas`,
       )
     }
     if (recentRequestCount > 3) {
@@ -638,7 +645,7 @@ function App() {
       return ['Jobs past due', 'Low customer satisfaction in one area', 'Increased demand forecast']
     }
     return alerts.slice(0, 3)
-  }, [overdueTaskCount, urgentFindingCount, pendingServiceCount, recentRequestCount])
+  }, [overdueTaskCount, lowSatisfactionCount, pendingServiceCount, recentRequestCount])
 
   const upcomingJobs = useMemo(() => {
     const timeSlots = ['9:00 AM', '11:30 AM', '2:00 PM', '4:15 PM']
@@ -1010,24 +1017,6 @@ function App() {
     })
     setServiceType('Plumber')
     setServiceRequestNotes('')
-  }
-
-  const acceptServiceRequest = (requestId: string) => {
-    if (!user) return
-    setServiceRequests((prev) => {
-      const next: ServiceRequest[] = prev.map((request) =>
-        request.id === requestId
-          ? {
-              ...request,
-              status: 'accepted' as const,
-              provider_email: user.email,
-              accepted_at: new Date().toISOString(),
-            }
-          : request,
-      )
-      localStorage.setItem(serviceRequestStorageKey, JSON.stringify(next))
-      return next
-    })
   }
 
   const pageTitle = adminTitleMap[activeSection] ?? 'Overview'
